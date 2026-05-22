@@ -5,6 +5,18 @@ import { join } from "node:path";
 const BASE_URL = process.env["AGENT_TRAIL_URL"] ?? "http://localhost:3002";
 const REPO_ROOT = join(import.meta.dir, "../../..");
 
+// ─── Minimal ANSI helpers ────────────────────────────────────────────────────
+
+const c = {
+  bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
+  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
+  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  amber: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  blue: (s: string) => `\x1b[34m${s}\x1b[0m`,
+  purple: (s: string) => `\x1b[35m${s}\x1b[0m`,
+};
+
 const [, , cmd, ...rest] = process.argv;
 
 switch (cmd) {
@@ -251,15 +263,3 @@ function priorityColor(p: string): string {
   };
   return (map[p] ?? c.dim)(`[${p}]`);
 }
-
-// ─── Minimal ANSI helpers ────────────────────────────────────────────────────
-
-const c = {
-  bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
-  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
-  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
-  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
-  amber: (s: string) => `\x1b[33m${s}\x1b[0m`,
-  blue: (s: string) => `\x1b[34m${s}\x1b[0m`,
-  purple: (s: string) => `\x1b[35m${s}\x1b[0m`,
-};
