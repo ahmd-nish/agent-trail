@@ -31,6 +31,7 @@ export interface Board {
   id: string;
   name: string;
   prdSource: string | null;
+  webhookUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }

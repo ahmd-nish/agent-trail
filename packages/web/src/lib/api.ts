@@ -37,6 +37,8 @@ export const api = {
     list: () => req<Board[]>("/api/boards"),
     create: (name: string) => req<Board>("/api/boards", { method: "POST", body: JSON.stringify({ name }) }),
     delete: (boardId: string) => req<{ ok: boolean }>(`/api/boards/${boardId}`, { method: "DELETE" }),
+    update: (boardId: string, data: { webhookUrl?: string | null }) =>
+      req<Board>(`/api/boards/${boardId}`, { method: "PATCH", body: JSON.stringify(data) }),
     plan: (opts: { prdText: string; name?: string; boardId?: string; dryRun?: boolean }) =>
       req<PlanResult>("/api/boards/plan", { method: "POST", body: JSON.stringify(opts) }),
   },

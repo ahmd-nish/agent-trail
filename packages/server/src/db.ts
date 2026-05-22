@@ -12,6 +12,8 @@ export function getDb(): Database {
   _db = new Database(join(process.cwd(), "agent-trail.db"));
   const schema = readFileSync(schemaPath, "utf-8");
   _db.exec(schema);
+  // Additive migrations — safe to run on every startup
+  try { _db.exec("ALTER TABLE boards ADD COLUMN webhook_url TEXT"); } catch { /* already exists */ }
   return _db;
 }
 
@@ -21,6 +23,7 @@ type BoardRow = {
   id: string;
   name: string;
   prd_source: string | null;
+  webhook_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -51,6 +54,7 @@ export function rowToBoard(row: BoardRow): Board {
     id: row.id,
     name: row.name,
     prdSource: row.prd_source,
+    webhookUrl: row.webhook_url ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -5,6 +5,7 @@ import { Board as KanbanBoard } from "./components/Board.tsx";
 import { TaskDetail } from "./components/TaskDetail.tsx";
 import { DagView } from "./components/DagView.tsx";
 import { PlanModal } from "./components/PlanModal.tsx";
+import { BoardSettings } from "./components/BoardSettings.tsx";
 
 type View = "board" | "dag";
 
@@ -122,6 +123,14 @@ export function App() {
           >
             ✦ Plan from PRD
           </button>
+          {activeBoard && (
+            <BoardSettings
+              board={activeBoard}
+              onUpdated={(updated) =>
+                setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)))
+              }
+            />
+          )}
         </div>
 
         {/* View switcher */}

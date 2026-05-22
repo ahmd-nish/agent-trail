@@ -6,6 +6,7 @@ import { WorktreeManager } from "../../core/src/adapters/worktree.ts";
 import { McpConfigManager } from "../../core/src/adapters/mcp-config.ts";
 import { parseTelemetry, extractMetrics } from "../../core/src/telemetry/parser.ts";
 import { capturePostExecutionArtifacts } from "../../core/src/adapters/post-execution.ts";
+import { sendWebhook, type WebhookEvent } from "../../core/src/adapters/webhook.ts";
 import type { StreamEvent } from "../../core/src/types/stream-json.ts";
 
 const MAX_CONCURRENT = 3;
@@ -151,6 +152,7 @@ class ExecutionManager {
         this.broadcast(taskId, { type: "execution_complete", status, executionId });
         this.closeAll(taskId);
         this.active.delete(taskId);
+        fireWebhook(taskId, executionId, result.passed ? "task_completed" : "task_failed", db);
       });
 
       return { executionId };
@@ -196,6 +198,7 @@ class ExecutionManager {
       this.closeAll(taskId);
       this.active.delete(taskId);
       this.mcpConfigs.cleanup(taskId);
+      fireWebhook(taskId, executionId, status, db);
     };
 
     // Build the prompt — include decision context if resuming
@@ -261,6 +264,43 @@ class ExecutionManager {
     });
 
     return { executionId };
+  }
+}
+
+function fireWebhook(
+  taskId: string,
+  executionId: string,
+  status: "completed" | "failed" | "awaiting_human",
+  db: ReturnType<typeof getDb>,
+): void {
+  try {
+    const row = db
+      .query(
+        `SELECT t.id, t.title, t.board_id, b.name AS board_name, b.webhook_url
+         FROM tasks t JOIN boards b ON t.board_id = b.id WHERE t.id = ?`,
+      )
+      .get(taskId) as {
+        id: string; title: string; board_id: string; board_name: string; webhook_url: string | null;
+      } | null;
+
+    if (!row?.webhook_url) return;
+
+    const event: WebhookEvent = {
+      event:
+        status === "completed" ? "task_completed"
+        : status === "awaiting_human" ? "awaiting_human"
+        : "task_failed",
+      board: { id: row.board_id, name: row.board_name },
+      task: { id: row.id, title: row.title },
+      executionId,
+      timestamp: new Date().toISOString(),
+    };
+
+    sendWebhook(row.webhook_url, event).catch((err) =>
+      console.warn(`[webhook] ${err.message}`),
+    );
+  } catch (err) {
+    console.warn(`[webhook] lookup failed: ${err}`);
   }
 }
 

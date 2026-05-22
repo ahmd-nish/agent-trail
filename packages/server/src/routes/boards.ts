@@ -26,6 +26,21 @@ boardsRouter.post("/", async (c) => {
   return c.json(rowToBoard(board), 201);
 });
 
+boardsRouter.patch("/:boardId", async (c) => {
+  const { boardId } = c.req.param();
+  const body = await c.req.json<{ webhookUrl?: string | null }>();
+  const db = getDb();
+  const now = new Date().toISOString();
+  db.query("UPDATE boards SET webhook_url = ?, updated_at = ? WHERE id = ?").run(
+    body.webhookUrl ?? null,
+    now,
+    boardId,
+  );
+  const row = db.query("SELECT * FROM boards WHERE id = ?").get(boardId) as Parameters<typeof rowToBoard>[0];
+  if (!row) return c.json({ error: "Not found" }, 404);
+  return c.json(rowToBoard(row));
+});
+
 boardsRouter.delete("/:boardId", (c) => {
   const { boardId } = c.req.param();
   const db = getDb();
