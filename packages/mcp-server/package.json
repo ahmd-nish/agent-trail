@@ -1,0 +1,13 @@
+{
+  "name": "@agent-trail/mcp-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts"
+  },
+  "dependencies": {
+    "@agent-trail/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

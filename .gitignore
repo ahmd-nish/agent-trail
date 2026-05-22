@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+.env
+.env.local
+.agent-trail/
+*.db
+*.db-shm
+*.db-wal
+.bun/
+coverage/
+.vscode/
+.idea/
+probe-output/

@@ -1,0 +1,12 @@
+{
+  "name": "@agent-trail/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-trail": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-trail/core": "workspace:*"
+  }
+}

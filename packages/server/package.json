@@ -1,0 +1,13 @@
+{
+  "name": "@agent-trail/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts"
+  },
+  "dependencies": {
+    "@agent-trail/core": "workspace:*",
+    "hono": "^4.12.21"
+  }
+}

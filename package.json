@@ -1,0 +1,26 @@
+{
+  "name": "agent-trail",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source kanban board for orchestrating Claude Code with MCP/skill assignment, TDD gates, and human decision tickets",
+  "license": "MIT",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "bun --filter '*' dev",
+    "dev:server": "bun --hot packages/server/src/index.ts",
+    "dev:web": "bun run -F '@agent-trail/web' dev",
+    "build": "bun --filter '*' build",
+    "test": "bun test",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "probe:claude": "bun scripts/probe-claude-code.ts",
+    "mcp:board": "AGENT_TRAIL_DB_PATH=$(pwd)/agent-trail.db bun packages/core/src/mcp/board-server.ts",
+    "cli": "bun packages/cli/src/index.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  },
+  "engines": { "bun": ">=1.1.0" }
+}
