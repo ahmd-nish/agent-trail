@@ -87,6 +87,15 @@ Open http://localhost:5173, create a board, paste a PRD, and click **▶ Run** o
 # Start server + open browser
 bun cli init
 
+# Generate a task graph from a PRD file → new board
+bun cli plan examples/sample-prd.md --name "URL Shortener"
+
+# Dry run — print the task graph without saving
+bun cli plan examples/sample-prd.md --dry-run
+
+# Add tasks to an existing board
+bun cli plan examples/sample-prd.md --board <boardId>
+
 # Watch a task execute with live output
 bun cli start <taskId>
 

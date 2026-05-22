@@ -37,6 +37,8 @@ export const api = {
     list: () => req<Board[]>("/api/boards"),
     create: (name: string) => req<Board>("/api/boards", { method: "POST", body: JSON.stringify({ name }) }),
     delete: (boardId: string) => req<{ ok: boolean }>(`/api/boards/${boardId}`, { method: "DELETE" }),
+    plan: (opts: { prdText: string; name?: string; boardId?: string; dryRun?: boolean }) =>
+      req<PlanResult>("/api/boards/plan", { method: "POST", body: JSON.stringify(opts) }),
   },
   tasks: {
     list: (boardId: string) => req<Task[]>(`/api/boards/${boardId}/tasks`),
@@ -63,6 +65,13 @@ export const api = {
     board: (boardId: string) => req<Record<string, unknown>>(`/api/boards/${boardId}/export`),
   },
 };
+
+export interface PlanResult {
+  board: { id: string; name: string } | null;
+  tasks: Task[];
+  usage: { inputTokens: number; outputTokens: number };
+  dryRun: boolean;
+}
 
 export interface ArtifactRow {
   id: string;

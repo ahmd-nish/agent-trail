@@ -23,6 +23,9 @@ switch (cmd) {
   case "init":
     await cmdInit();
     break;
+  case "plan":
+    await cmdPlan(rest);
+    break;
   case "start":
     await cmdStart(rest[0]);
     break;
@@ -128,6 +131,83 @@ async function cmdStart(taskId: string | undefined) {
   process.exit(exitCode);
 }
 
+async function cmdPlan(args: string[]) {
+  // agent-trail plan <file> [--name <board>] [--dry-run] [--board <id>]
+  const file = args.find((a) => !a.startsWith("--"));
+  if (!file) {
+    console.error(`Usage: agent-trail plan ${c.bold("<prd-file>")} [--name <board-name>] [--board <id>] [--dry-run]`);
+    process.exit(1);
+  }
+
+  const dryRun = args.includes("--dry-run");
+  const nameIdx = args.indexOf("--name");
+  const boardIdx = args.indexOf("--board");
+  const name = nameIdx >= 0 ? args[nameIdx + 1] : undefined;
+  const boardId = boardIdx >= 0 ? args[boardIdx + 1] : undefined;
+
+  if (!dryRun && !name && !boardId) {
+    console.error(`Provide ${c.bold("--name <board-name>")} to create a new board or ${c.bold("--board <id>")} to add to an existing one`);
+    process.exit(1);
+  }
+
+  let prdText: string;
+  try {
+    prdText = await Bun.file(file).text();
+  } catch {
+    console.error(`${c.red("✗")} Cannot read file: ${file}`);
+    process.exit(1);
+  }
+
+  console.log(`${c.dim("Planning")} ${c.bold(file)}…`);
+
+  let res: Response;
+  try {
+    res = await apiFetch("/api/boards/plan", {
+      method: "POST",
+      body: JSON.stringify({ prdText, name, boardId, dryRun }),
+    });
+  } catch {
+    console.error(`${c.red("✗")} Cannot reach server at ${BASE_URL} — run ${c.bold("agent-trail init")} first`);
+    process.exit(1);
+  }
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`${c.red("✗")} Planner error: ${err}`);
+    process.exit(1);
+  }
+
+  const result = (await res.json()) as {
+    board: { id: string; name: string } | null;
+    tasks: Array<{ id: string; title: string; priority: string; dependsOn: string[]; tddEnabled: boolean }>;
+    usage: { inputTokens: number; outputTokens: number };
+    dryRun: boolean;
+  };
+
+  if (result.board) {
+    console.log(`\n${c.green("✓")} Board: ${c.bold(result.board.name)} ${c.dim(`(${result.board.id.slice(0, 8)})`)}`);
+  } else {
+    console.log(`\n${c.amber("~")} Dry run — tasks not saved`);
+  }
+
+  console.log(`\n${c.dim("Task graph")} (${result.tasks.length} tasks):\n`);
+
+  for (const t of result.tasks) {
+    const deps = t.dependsOn.length > 0
+      ? c.dim(` → depends on: ${t.dependsOn.join(", ")}`)
+      : "";
+    const tdd = t.tddEnabled ? c.green(" TDD") : "";
+    console.log(`  ${priorityColor(t.priority)} ${c.bold(t.title)}${tdd}${deps}`);
+    console.log(`    ${c.dim(t.id)}`);
+  }
+
+  console.log(`\n${c.dim(`Tokens: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`)}`);
+
+  if (!result.dryRun && result.board) {
+    console.log(`\n${c.dim("Open the board:")} http://localhost:5173`);
+  }
+}
+
 async function cmdStatus() {
   let boards: Array<{ id: string; name: string }>;
   try {
@@ -180,9 +260,15 @@ ${c.bold("agent-trail")} — AI-native kanban board for Claude Code
 ${c.dim("Usage:")} agent-trail <command>
 
 ${c.dim("Commands:")}
-  ${c.bold("init")}              Start the API server and open the board
-  ${c.bold("start")} <taskId>   Execute a task and stream live events
-  ${c.bold("status")}           Show all boards and task counts
+  ${c.bold("init")}                            Start the API server and open the board
+  ${c.bold("plan")} <file> --name <board>      Generate a task graph from a PRD file
+  ${c.bold("start")} <taskId>                  Execute a task and stream live events
+  ${c.bold("status")}                          Show all boards and task counts
+
+${c.dim("plan flags:")}
+  --name <board-name>    Create a new board with this name
+  --board <id>           Add tasks to an existing board
+  --dry-run              Print the task graph without saving
 `);
 }
 

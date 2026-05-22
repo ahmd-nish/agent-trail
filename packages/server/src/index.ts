@@ -6,6 +6,7 @@ import { executionsRouter } from "./routes/executions.ts";
 import { decisionsRouter } from "./routes/decisions.ts";
 import { artifactsRouter } from "./routes/artifacts.ts";
 import { exportRouter } from "./routes/export.ts";
+import { planRouter } from "./routes/plan.ts";
 import { getDb } from "./db.ts";
 
 const app = new Hono();
@@ -22,6 +23,7 @@ app.route("/api", executionsRouter);
 app.route("/api", decisionsRouter);
 app.route("/api", artifactsRouter);
 app.route("/api", exportRouter);
+app.route("/api/boards", planRouter);
 
 // Initialize DB on startup
 getDb();

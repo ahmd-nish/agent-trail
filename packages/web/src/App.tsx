@@ -4,6 +4,7 @@ import { api } from "./lib/api.ts";
 import { Board as KanbanBoard } from "./components/Board.tsx";
 import { TaskDetail } from "./components/TaskDetail.tsx";
 import { DagView } from "./components/DagView.tsx";
+import { PlanModal } from "./components/PlanModal.tsx";
 
 type View = "board" | "dag";
 
@@ -16,6 +17,7 @@ export function App() {
   const [newBoardName, setNewBoardName] = useState("");
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
 
   // Load boards on mount
   useEffect(() => {
@@ -114,6 +116,12 @@ export function App() {
           >
             Create
           </button>
+          <button
+            onClick={() => setShowPlanModal(true)}
+            className="text-xs px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white"
+          >
+            ✦ Plan from PRD
+          </button>
         </div>
 
         {/* View switcher */}
@@ -161,6 +169,33 @@ export function App() {
         onUpdated={handleTaskUpdated}
         onDeleted={handleTaskDeleted}
       />
+
+      {/* Plan from PRD modal */}
+      {showPlanModal && (
+        <PlanModal
+          boards={boards}
+          activeBoardId={activeBoardId}
+          onClose={() => setShowPlanModal(false)}
+          onDone={(result) => {
+            setShowPlanModal(false);
+            if (result.board) {
+              const newBoard: Board = {
+                id: result.board.id,
+                name: result.board.name,
+                prdSource: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+              setBoards((bs) => [newBoard, ...bs]);
+              setActiveBoardId(result.board!.id);
+              setTasks(result.tasks);
+            } else {
+              // Added to existing board — reload tasks
+              setTasks((ts) => [...ts, ...result.tasks]);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
