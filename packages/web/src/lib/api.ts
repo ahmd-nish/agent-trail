@@ -39,6 +39,10 @@ export const api = {
     delete: (boardId: string) => req<{ ok: boolean }>(`/api/boards/${boardId}`, { method: "DELETE" }),
     update: (boardId: string, data: { webhookUrl?: string | null }) =>
       req<Board>(`/api/boards/${boardId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    run: (boardId: string) =>
+      req<{ scheduledCount: number }>(`/api/boards/${boardId}/run`, { method: "POST" }),
+    isRunning: (boardId: string) =>
+      req<{ running: boolean }>(`/api/boards/${boardId}/running`),
     plan: (opts: { prdText: string; name?: string; boardId?: string; dryRun?: boolean }) =>
       req<PlanResult>("/api/boards/plan", { method: "POST", body: JSON.stringify(opts) }),
   },

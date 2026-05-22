@@ -19,6 +19,7 @@ export function App() {
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [boardRunning, setBoardRunning] = useState(false);
 
   // Load boards on mount
   useEffect(() => {
@@ -37,6 +38,30 @@ export function App() {
       .then(setTasks)
       .finally(() => setLoadingTasks(false));
   }, [activeBoardId]);
+
+  // Poll task list while a board run is active
+  useEffect(() => {
+    if (!boardRunning || !activeBoardId) return;
+    const id = setInterval(async () => {
+      const updated = await api.tasks.list(activeBoardId).catch(() => null);
+      if (!updated) return;
+      setTasks(updated);
+      // Check server for run completion
+      const { running } = await api.boards.isRunning(activeBoardId).catch(() => ({ running: false }));
+      if (!running) setBoardRunning(false);
+    }, 2_000);
+    return () => clearInterval(id);
+  }, [boardRunning, activeBoardId]);
+
+  const runBoard = useCallback(async () => {
+    if (!activeBoardId || boardRunning) return;
+    setBoardRunning(true);
+    try {
+      await api.boards.run(activeBoardId);
+    } catch {
+      setBoardRunning(false);
+    }
+  }, [activeBoardId, boardRunning]);
 
   const createBoard = useCallback(async () => {
     const name = newBoardName.trim();
@@ -123,6 +148,22 @@ export function App() {
           >
             ✦ Plan from PRD
           </button>
+          {activeBoardId && (
+            <button
+              onClick={runBoard}
+              disabled={boardRunning}
+              className="text-xs px-2.5 py-1 rounded bg-violet-700 hover:bg-violet-600 disabled:opacity-50 text-white flex items-center gap-1.5"
+            >
+              {boardRunning ? (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  Running…
+                </>
+              ) : (
+                "▶ Run all"
+              )}
+            </button>
+          )}
           {activeBoard && (
             <BoardSettings
               board={activeBoard}

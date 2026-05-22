@@ -25,9 +25,15 @@ class ExecutionManager {
   private worktrees = new WorktreeManager(REPO_ROOT);
   private mcpConfigs = new McpConfigManager(REPO_ROOT);
   private enc = new TextEncoder();
+  private taskCompletionListeners = new Map<string, (status: string) => void>();
+  private boardRunning = new Set<string>();
 
   get concurrentCount() {
     return this.active.size;
+  }
+
+  isBoardRunning(boardId: string): boolean {
+    return this.boardRunning.has(boardId);
   }
 
   // ─── SSE ─────────────────────────────────────────────────────────────────────
@@ -80,6 +86,76 @@ class ExecutionManager {
 
   async start(taskId: string): Promise<{ executionId: string } | { error: string }> {
     return this._run(taskId);
+  }
+
+  // ─── Board runner ─────────────────────────────────────────────────────────
+
+  async runBoard(boardId: string): Promise<{ scheduledCount: number } | { error: string }> {
+    if (this.boardRunning.has(boardId)) return { error: "Board run already in progress" };
+    const db = getDb();
+    const count = (
+      db
+        .query("SELECT COUNT(*) as n FROM tasks WHERE board_id = ? AND status IN ('backlog','ready')")
+        .get(boardId) as { n: number } | null
+    )?.n ?? 0;
+    if (count === 0) return { error: "No runnable tasks (all done, blocked, or in review)" };
+    this.boardRunning.add(boardId);
+    this._boardRunLoop(boardId).catch((err) => {
+      console.error(`[board-runner:${boardId}]`, err);
+      this.boardRunning.delete(boardId);
+    });
+    return { scheduledCount: count };
+  }
+
+  private async _awaitTask(taskId: string): Promise<string> {
+    const db = getDb();
+    const row = db.query("SELECT status FROM tasks WHERE id = ?").get(taskId) as { status: string } | null;
+    const terminal = ["done", "in_review", "blocked", "failed"];
+    if (row && terminal.includes(row.status)) return row.status;
+    return new Promise<string>((resolve) => {
+      this.taskCompletionListeners.set(taskId, resolve);
+    });
+  }
+
+  private async _boardRunLoop(boardId: string): Promise<void> {
+    const db = getDb();
+
+    try {
+      while (true) {
+        const rows = db
+          .query("SELECT * FROM tasks WHERE board_id = ? ORDER BY created_at")
+          .all(boardId) as Parameters<typeof rowToTask>[0][];
+        const tasks = rows.map(rowToTask);
+
+        const doneIds = new Set(
+          tasks.filter((t) => t.status === "done" || t.status === "in_review").map((t) => t.id),
+        );
+        const inProgress = tasks.filter((t) => t.status === "in_progress");
+
+        // Wait for any currently running tasks before advancing
+        if (inProgress.length > 0) {
+          await Promise.race(inProgress.map((t) => this._awaitTask(t.id)));
+          continue;
+        }
+
+        // Find the next runnable task (dependencies all complete)
+        const next = tasks.find(
+          (t) =>
+            (t.status === "backlog" || t.status === "ready") &&
+            t.dependsOn.every((dep) => doneIds.has(dep)),
+        );
+
+        if (!next) break; // nothing left to run — done or permanently blocked
+
+        const result = await this.start(next.id);
+        if ("error" in result) break; // e.g. max concurrent hit — stop
+
+        const finalStatus = await this._awaitTask(next.id);
+        if (finalStatus === "blocked") break; // task failed or needs human input
+      }
+    } finally {
+      this.boardRunning.delete(boardId);
+    }
   }
 
   /** Resume a task after a human decision has been answered. */
@@ -153,6 +229,8 @@ class ExecutionManager {
         this.closeAll(taskId);
         this.active.delete(taskId);
         fireWebhook(taskId, executionId, result.passed ? "task_completed" : "task_failed", db);
+        const listener = this.taskCompletionListeners.get(taskId);
+        if (listener) { this.taskCompletionListeners.delete(taskId); listener(status); }
       });
 
       return { executionId };
@@ -199,6 +277,8 @@ class ExecutionManager {
       this.active.delete(taskId);
       this.mcpConfigs.cleanup(taskId);
       fireWebhook(taskId, executionId, status, db);
+      const listener = this.taskCompletionListeners.get(taskId);
+      if (listener) { this.taskCompletionListeners.delete(taskId); listener(status); }
     };
 
     // Build the prompt — include decision context if resuming

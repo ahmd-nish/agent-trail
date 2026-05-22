@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getDb, rowToBoard } from "../db.ts";
+import { executionManager } from "../execution-manager.ts";
 import type { Board } from "../../../core/src/types/index.ts";
 
 export const boardsRouter = new Hono();
@@ -39,6 +40,18 @@ boardsRouter.patch("/:boardId", async (c) => {
   const row = db.query("SELECT * FROM boards WHERE id = ?").get(boardId) as Parameters<typeof rowToBoard>[0];
   if (!row) return c.json({ error: "Not found" }, 404);
   return c.json(rowToBoard(row));
+});
+
+boardsRouter.post("/:boardId/run", async (c) => {
+  const { boardId } = c.req.param();
+  const result = await executionManager.runBoard(boardId);
+  if ("error" in result) return c.json({ error: result.error }, 400);
+  return c.json(result);
+});
+
+boardsRouter.get("/:boardId/running", (c) => {
+  const { boardId } = c.req.param();
+  return c.json({ running: executionManager.isBoardRunning(boardId) });
 });
 
 boardsRouter.delete("/:boardId", (c) => {
