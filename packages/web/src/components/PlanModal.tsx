@@ -127,7 +127,7 @@ export function PlanModal({ boards, activeBoardId, onDone, onClose }: Props) {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-slate-700">
-          <p className="text-xs text-slate-500">Uses claude-sonnet-4-6 + ANTHROPIC_API_KEY</p>
+          <p className="text-xs text-slate-500">Uses claude CLI — no API key needed</p>
           <div className="flex gap-2">
             <button
               onClick={onClose}

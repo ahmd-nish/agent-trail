@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getDb } from "../db.ts";
-import { planFromPrd } from "../../core/src/planner/index.ts";
-import type { Task } from "../../core/src/types/index.ts";
+import { planFromPrd } from "../../../core/src/planner/index.ts";
+import type { Task } from "../../../core/src/types/index.ts";
 
 export const planRouter = new Hono();
 
