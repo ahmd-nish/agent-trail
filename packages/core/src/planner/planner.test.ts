@@ -61,7 +61,6 @@ describe("buildDag", () => {
     const result = buildDag(tasks);
     const a = result.ordered.find((t) => t.id === "a")!;
     const b = result.ordered.find((t) => t.id === "b")!;
-    // a and b are sequential — different groups
     expect(a.parallelGroup).not.toBe(b.parallelGroup);
   });
 
@@ -88,63 +87,47 @@ describe("buildDag", () => {
   });
 });
 
-// --- Planner tests (Anthropic SDK stubbed) ---
+// --- Planner tests (runner stubbed — no API tokens needed) ---
 
-// We mock the Anthropic module before importing the planner.
-const mockCreate = mock(async (_params: unknown) => ({
-  stop_reason: "tool_use",
-  content: [
+const VALID_RESPONSE = JSON.stringify({
+  tasks: [
     {
-      type: "tool_use",
-      id: "call_1",
-      name: "create_task_graph",
-      input: {
-        tasks: [
-          {
-            id: "task-1",
-            title: "Create SQLite schema",
-            description: "Write the initial database schema",
-            priority: "high",
-            tddEnabled: true,
-            mcps: [],
-            skills: [],
-            dependsOn: [],
-          },
-          {
-            id: "task-2",
-            title: "Build POST /shorten endpoint",
-            description: "Implement URL shortening logic",
-            priority: "high",
-            tddEnabled: true,
-            mcps: [],
-            skills: [],
-            dependsOn: ["task-1"],
-          },
-          {
-            id: "task-3",
-            title: "Build GET /r/:code redirect",
-            description: "Implement redirect with click count increment",
-            priority: "high",
-            tddEnabled: true,
-            mcps: [],
-            skills: [],
-            dependsOn: ["task-1"],
-          },
-        ],
-      },
+      id: "task-1",
+      title: "Create SQLite schema",
+      description: "Write the initial database schema",
+      priority: "high",
+      tddEnabled: true,
+      mcps: [],
+      skills: [],
+      dependsOn: [],
+    },
+    {
+      id: "task-2",
+      title: "Build POST /shorten endpoint",
+      description: "Implement URL shortening logic",
+      priority: "high",
+      tddEnabled: true,
+      mcps: [],
+      skills: [],
+      dependsOn: ["task-1"],
+    },
+    {
+      id: "task-3",
+      title: "Build GET /r/:code redirect",
+      description: "Implement redirect with click count increment",
+      priority: "high",
+      tddEnabled: true,
+      mcps: [],
+      skills: [],
+      dependsOn: ["task-1"],
     },
   ],
-  usage: { input_tokens: 100, output_tokens: 200 },
-}));
+});
 
-mock.module("@anthropic-ai/sdk", () => ({
-  default: class MockAnthropic {
-    messages = { create: mockCreate };
-  },
-  Anthropic: class MockAnthropic {
-    messages = { create: mockCreate };
-  },
-}));
+const mockRunner = mock(async (_prompt: string): Promise<string> => VALID_RESPONSE);
+
+// Mock the runner module before importing planFromPrd
+mock.module("./runner.ts", () => ({ runClaudePlanner: mockRunner }));
 
 import { planFromPrd } from "./index.ts";
 
@@ -155,7 +138,8 @@ describe("planFromPrd", () => {
   );
 
   beforeEach(() => {
-    mockCreate.mockClear();
+    mockRunner.mockClear();
+    mockRunner.mockImplementation(async () => VALID_RESPONSE);
   });
 
   it("returns tasks with all required fields", async () => {
@@ -191,30 +175,19 @@ describe("planFromPrd", () => {
     }
   });
 
-  it("calls the Anthropic API exactly once on success", async () => {
+  it("calls the runner exactly once on success", async () => {
     await planFromPrd(samplePrd, "board-1");
-    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockRunner).toHaveBeenCalledTimes(1);
   });
 
   it("retries up to 2 times on validation failure before throwing", async () => {
-    mockCreate.mockImplementationOnce(async () => ({
-      stop_reason: "tool_use",
-      content: [{ type: "tool_use", name: "create_task_graph", input: { tasks: "not-an-array" } }],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    }));
-    mockCreate.mockImplementationOnce(async () => ({
-      stop_reason: "tool_use",
-      content: [{ type: "tool_use", name: "create_task_graph", input: { tasks: "not-an-array" } }],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    }));
-    mockCreate.mockImplementationOnce(async () => ({
-      stop_reason: "tool_use",
-      content: [{ type: "tool_use", name: "create_task_graph", input: { tasks: "not-an-array" } }],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    }));
+    const badResponse = JSON.stringify({ tasks: "not-an-array" });
+    mockRunner
+      .mockImplementationOnce(async () => badResponse)
+      .mockImplementationOnce(async () => badResponse)
+      .mockImplementationOnce(async () => badResponse);
 
     await expect(planFromPrd(samplePrd, "board-1")).rejects.toThrow();
-    // 1 initial + 2 retries = 3 total calls
-    expect(mockCreate).toHaveBeenCalledTimes(3);
+    expect(mockRunner).toHaveBeenCalledTimes(3);
   });
 });
