@@ -1,9 +1,21 @@
 #!/usr/bin/env bun
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 
-const BASE_URL = process.env["AGENT_TRAIL_URL"] ?? "http://localhost:3002";
-const REPO_ROOT = join(import.meta.dir, "../../..");
+const DEFAULT_PORT = Number(process.env["AGENT_TRAIL_PORT"] ?? process.env["PORT"] ?? 3002);
+const BASE_URL_FROM_ENV = process.env["AGENT_TRAIL_URL"] ?? process.env["VIBE_BOARD_URL"];
+let BASE_URL = BASE_URL_FROM_ENV ?? `http://localhost:${DEFAULT_PORT}`;
+
+// The CLI ships alongside the server package. In the published npm layout the
+// server lives at ../../server; in the workspace it lives at ../../server too.
+// Fall back to a monorepo path for `bun run cli` from repo root.
+const SERVER_CANDIDATES = [
+  join(import.meta.dir, "../../server/src/index.ts"),
+  join(import.meta.dir, "../../../server/src/index.ts"),
+];
+const SERVER_ENTRY = SERVER_CANDIDATES.find((p) => existsSync(p));
 
 // ─── Minimal ANSI helpers ────────────────────────────────────────────────────
 
@@ -17,11 +29,20 @@ const c = {
   purple: (s: string) => `\x1b[35m${s}\x1b[0m`,
 };
 
-const [, , cmd, ...rest] = process.argv;
+const [, , rawCmd, ...rest] = process.argv;
+// No subcommand OR a flag as first arg → default to `init` (launch flow).
+// This is what `npx agent-trail` and `npx agent-trail --demo` land in.
+const cmd = !rawCmd || rawCmd.startsWith("--") ? "init" : rawCmd;
+const initArgs = !rawCmd || rawCmd.startsWith("--") ? [rawCmd, ...rest].filter(Boolean) as string[] : rest;
+
+if (initArgs.includes("--help") || initArgs.includes("-h")) {
+  printHelp();
+  process.exit(0);
+}
 
 switch (cmd) {
   case "init":
-    await cmdInit();
+    await cmdInit(initArgs);
     break;
   case "plan":
     await cmdPlan(rest);
@@ -32,30 +53,72 @@ switch (cmd) {
   case "status":
     await cmdStatus();
     break;
+  case "doctor":
+    await cmdDoctor();
+    break;
+  case "run":
+    await cmdRun(rest);
+    break;
+  case "resume":
+    await cmdResume(rest[0]);
+    break;
   default:
     printHelp();
-    process.exit(cmd ? 1 : 0);
+    process.exit(rawCmd ? 1 : 0);
 }
 
 // ─── Commands ────────────────────────────────────────────────────────────────
 
-async function cmdInit() {
-  checkPrerequisites();
+async function cmdInit(args: string[]) {
+  const demoMode = args.includes("--demo");
+  const noOpen = args.includes("--no-open");
+  const portFlag = flagValue(args, "--port");
+  const requestedPort = portFlag ? Number(portFlag) : (BASE_URL_FROM_ENV ? undefined : DEFAULT_PORT);
 
+  if (!SERVER_ENTRY) {
+    console.error(`${c.red("✗")} Server package not found next to the CLI. Is agent-trail installed correctly?`);
+    process.exit(1);
+  }
+
+  // If BASE_URL_FROM_ENV is set, just try to hit that — otherwise pick a port.
+  let port = requestedPort ?? DEFAULT_PORT;
   const alreadyUp = await ping();
   if (alreadyUp) {
-    console.log(`${c.green("✓")} Server already running at ${BASE_URL}`);
-    openBrowser("http://localhost:5173");
+    console.log(`${c.green("✓")} agent-trail already running at ${c.bold(BASE_URL)}`);
+    if (!noOpen) openBrowser(BASE_URL + (demoMode ? "/?demo=1" : ""));
     return;
   }
 
-  console.log(`${c.dim("Starting agent-trail…")}`);
+  if (!BASE_URL_FROM_ENV) {
+    port = await findOpenPort(port);
+    BASE_URL = `http://localhost:${port}`;
+  }
 
+  checkPrerequisites({ warnOnly: demoMode });
+
+  console.log(`${c.dim("Starting agent-trail…")} ${c.dim(`(port ${port})`)}`);
+
+  // Prefer bun (native SQLite bindings). Fall back to node if bun isn't in PATH
+  // — the caller will see a clear error rather than a silent failure.
+  const runtime = Bun.which("bun") ?? process.execPath;
   const server = spawn(
-    process.execPath,
-    [join(REPO_ROOT, "packages/server/src/index.ts")],
-    { stdio: "inherit", cwd: REPO_ROOT },
+    runtime,
+    [SERVER_ENTRY],
+    {
+      stdio: "inherit",
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        AGENT_TRAIL_PORT: String(port),
+        // Server default already uses CWD; pass explicit for clarity.
+        AGENT_TRAIL_ROOT: process.env["AGENT_TRAIL_ROOT"] ?? process.cwd(),
+      },
+    },
   );
+
+  const shutdown = () => { try { server.kill("SIGTERM"); } catch { /* already dead */ } };
+  process.on("SIGINT", () => { shutdown(); process.exit(130); });
+  process.on("SIGTERM", () => { shutdown(); process.exit(143); });
 
   server.on("error", (err) => {
     console.error(`${c.red("✗")} Failed to start server: ${err.message}`);
@@ -64,18 +127,17 @@ async function cmdInit() {
 
   server.on("exit", (code) => process.exit(code ?? 0));
 
-  // Wait for server to accept connections
   const up = await waitForServer(BASE_URL);
   if (!up) {
     console.error(`${c.red("✗")} Server didn't start in time`);
     process.exit(1);
   }
 
-  console.log(`${c.green("✓")} Server running at ${c.bold(BASE_URL)}`);
-  console.log(`${c.dim("  Web UI:")} bun run dev:web → http://localhost:5173`);
-  console.log(`${c.dim("  API:  ")} ${BASE_URL}/api/health`);
+  const openUrl = BASE_URL + (demoMode ? "/?demo=1" : "");
+  console.log(`${c.green("✓")} agent-trail running at ${c.bold(openUrl)}`);
+  console.log(`${c.dim("  press Ctrl-C to stop")}`);
 
-  openBrowser("http://localhost:5173");
+  if (!noOpen) openBrowser(openUrl);
 }
 
 async function cmdStart(taskId: string | undefined) {
@@ -204,8 +266,88 @@ async function cmdPlan(args: string[]) {
   console.log(`\n${c.dim(`Tokens: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`)}`);
 
   if (!result.dryRun && result.board) {
-    console.log(`\n${c.dim("Open the board:")} http://localhost:5173`);
+    console.log(`\n${c.dim("Open the board:")} ${BASE_URL}`);
   }
+}
+
+async function cmdDoctor() {
+  console.log(`${c.bold("agent-trail doctor")} ${c.dim("— preflight checks\n")}`);
+  const checks: Array<{ name: string; ok: boolean; fix?: string; note?: string }> = [];
+
+  // 1. Bun runtime
+  const bun = Bun.which("bun");
+  checks.push({
+    name: "bun runtime",
+    ok: !!bun,
+    fix: bun ? undefined : "Install Bun ≥ 1.1: curl -fsSL https://bun.sh/install | bash",
+    note: bun ? Bun.version : undefined,
+  });
+
+  // 2. git
+  const git = Bun.which("git");
+  checks.push({
+    name: "git",
+    ok: !!git,
+    fix: git ? undefined : "Install git — https://git-scm.com/downloads",
+  });
+
+  // 3. claude CLI
+  const claude = Bun.which("claude");
+  checks.push({
+    name: "claude CLI",
+    ok: !!claude,
+    fix: claude ? undefined : `Install from https://claude.ai/download, then run ${c.bold("claude login")}`,
+  });
+
+  // 4. ANTHROPIC_API_KEY (only warn — claude CLI may hold its own auth)
+  const key = process.env["ANTHROPIC_API_KEY"];
+  checks.push({
+    name: "ANTHROPIC_API_KEY",
+    ok: !!key,
+    fix: key ? undefined : "Optional: export ANTHROPIC_API_KEY=... (needed only when not logged in via claude CLI)",
+    note: key ? `set (${key.length} chars)` : undefined,
+  });
+
+  // 5. Port availability
+  const portOpen = await isPortOpen(DEFAULT_PORT);
+  checks.push({
+    name: `port ${DEFAULT_PORT} available`,
+    ok: portOpen,
+    fix: portOpen ? undefined : `Something is listening on ${DEFAULT_PORT}. The CLI will auto-pick the next open port.`,
+  });
+
+  // 6. CWD is writable (creates DB, worktrees, .mcp.json here)
+  let cwdWritable = false;
+  try {
+    const probe = join(process.cwd(), ".agent-trail-doctor-probe");
+    await Bun.write(probe, "ok");
+    await Bun.file(probe).exists();
+    // best-effort cleanup
+    try { await Bun.$`rm ${probe}`.quiet(); } catch { /* ignore */ }
+    cwdWritable = true;
+  } catch { cwdWritable = false; }
+  checks.push({
+    name: "cwd writable",
+    ok: cwdWritable,
+    fix: cwdWritable ? undefined : `Run agent-trail from a directory you can write to (current: ${process.cwd()})`,
+  });
+
+  // Render
+  let hasFail = false;
+  for (const chk of checks) {
+    const icon = chk.ok ? c.green("✓") : (chk.name.startsWith("ANTHROPIC") ? c.amber("~") : c.red("✗"));
+    const note = chk.note ? c.dim(` (${chk.note})`) : "";
+    console.log(`  ${icon} ${chk.name}${note}`);
+    if (!chk.ok && chk.fix) console.log(`      ${c.dim(chk.fix)}`);
+    if (!chk.ok && !chk.name.startsWith("ANTHROPIC")) hasFail = true;
+  }
+
+  console.log("");
+  if (hasFail) {
+    console.log(`${c.red("✗")} One or more checks failed — fix them, then rerun ${c.bold("agent-trail doctor")}.`);
+    process.exit(1);
+  }
+  console.log(`${c.green("✓")} Ready to run ${c.bold("agent-trail")}`);
 }
 
 async function cmdStatus() {
@@ -257,13 +399,23 @@ function printHelp() {
   console.log(`
 ${c.bold("agent-trail")} — AI-native kanban board for Claude Code
 
-${c.dim("Usage:")} agent-trail <command>
+${c.dim("Usage:")} agent-trail ${c.dim("[command] [flags]")}
+
+${c.dim("With no command, launches the server + opens the board.")}
 
 ${c.dim("Commands:")}
-  ${c.bold("init")}                            Start the API server and open the board
+  ${c.bold("init")}                            Start the API server and open the board (default)
   ${c.bold("plan")} <file> --name <board>      Generate a task graph from a PRD file
   ${c.bold("start")} <taskId>                  Execute a task and stream live events
+  ${c.bold("run")}   --task <id> [--ci]        Headless run — poll for terminal state, print markdown summary
+  ${c.bold("resume")} <taskId>                 Resume the task's previous claude session
   ${c.bold("status")}                          Show all boards and task counts
+  ${c.bold("doctor")}                          Preflight checks (claude, git, ports, API key)
+
+${c.dim("init flags:")}
+  --demo                 Open with demo replay mode
+  --no-open              Don't launch a browser
+  --port <n>             Force a specific port (default 3002, auto-fallback if busy)
 
 ${c.dim("plan flags:")}
   --name <board-name>    Create a new board with this name
@@ -272,15 +424,44 @@ ${c.dim("plan flags:")}
 `);
 }
 
-function checkPrerequisites() {
+function checkPrerequisites(opts: { warnOnly?: boolean } = {}) {
   if (!Bun.which("claude")) {
-    console.error(`${c.red("✗")} claude CLI not found in PATH`);
-    console.error(`  Install from https://claude.ai/download`);
+    const msg = `${c.red("✗")} claude CLI not found in PATH`;
+    const fix = `  Install from https://claude.ai/download, then run ${c.bold("claude login")}`;
+    if (opts.warnOnly) {
+      console.warn(msg);
+      console.warn(fix);
+      console.warn(`  ${c.dim("Demo mode will work without it — real executions won't.")}`);
+      return;
+    }
+    console.error(msg);
+    console.error(fix);
     process.exit(1);
   }
-  if (!process.env["ANTHROPIC_API_KEY"]) {
-    console.warn(`${c.amber("⚠")}  ANTHROPIC_API_KEY not set — planner will fail`);
+}
+
+function flagValue(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return undefined;
+  const next = args[idx + 1];
+  if (!next || next.startsWith("--")) return undefined;
+  return next;
+}
+
+async function findOpenPort(preferred: number, maxTries = 20): Promise<number> {
+  for (let p = preferred; p < preferred + maxTries; p++) {
+    if (await isPortOpen(p)) return p;
   }
+  throw new Error(`No open port found in range ${preferred}-${preferred + maxTries}`);
+}
+
+function isPortOpen(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const srv = createServer();
+    srv.once("error", () => resolve(false));
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    srv.listen(port, "127.0.0.1");
+  });
 }
 
 async function ping(): Promise<boolean> {
@@ -348,4 +529,82 @@ function priorityColor(p: string): string {
     low: c.dim,
   };
   return (map[p] ?? c.dim)(`[${p}]`);
+}
+
+// PRD_OPEN_SOURCE 2.7 — headless CI mode.
+// Usage: agent-trail run --task <id> --ci [--timeout 900]
+//   • Kicks off the task's execution
+//   • Polls /api/tasks/:boardId/tasks (via the task-belongs-to-board lookup)
+//     until the task lands terminal (`in_review`, `done`, `blocked`, `failed`)
+//   • Exits 0 on in_review/done, 1 on blocked/failed
+//   • Prints a markdown summary to stdout — pipe into $GITHUB_STEP_SUMMARY.
+async function cmdRun(args: string[]) {
+  const taskFlag = flagValue(args, "--task");
+  const timeoutSec = Number(flagValue(args, "--timeout") ?? 1800);
+  const ci = args.includes("--ci");
+  if (!taskFlag) {
+    console.error(`Usage: agent-trail run --task ${c.bold("<taskId>")} [--ci] [--timeout <seconds>]`);
+    process.exit(2);
+  }
+
+  // Kick off.
+  const kick = await apiFetch(`/api/tasks/${taskFlag}/execute`, { method: "POST" });
+  if (kick.status === 409 || !kick.ok) {
+    const body = await kick.text().catch(() => "");
+    console.error(`${c.red("✗")} could not start task: ${body}`);
+    process.exit(1);
+  }
+  const { executionId } = await kick.json() as { executionId: string };
+  if (!ci) console.log(`${c.dim("▶")} started execution ${executionId.slice(0, 8)}`);
+
+  // Poll executions endpoint for terminal status.
+  const deadline = Date.now() + timeoutSec * 1000;
+  let terminal: { status: string; error_message: string | null; total_input_tokens: number | null; total_output_tokens: number | null; duration_ms: number | null } | null = null;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const res = await apiFetch(`/api/tasks/${taskFlag}/executions`);
+    if (!res.ok) continue;
+    const rows = await res.json() as Array<{ id: string; status: string; error_message: string | null; total_input_tokens: number | null; total_output_tokens: number | null; duration_ms: number | null }>;
+    const row = rows.find((r) => r.id === executionId);
+    if (row && (row.status === "completed" || row.status === "failed" || row.status === "awaiting_human")) {
+      terminal = row;
+      break;
+    }
+  }
+
+  if (!terminal) {
+    console.error(`${c.red("✗")} timed out after ${timeoutSec}s`);
+    process.exit(124);
+  }
+
+  const passed = terminal.status === "completed";
+  const summary = [
+    `## agent-trail — task ${taskFlag.slice(0, 8)}`,
+    "",
+    `- **Result:** ${passed ? "✅ completed" : terminal.status === "awaiting_human" ? "⏸ awaiting_human" : "❌ failed"}`,
+    `- Duration: ${(terminal.duration_ms ?? 0) / 1000}s`,
+    `- Tokens in: ${terminal.total_input_tokens ?? 0}`,
+    `- Tokens out: ${terminal.total_output_tokens ?? 0}`,
+    terminal.error_message ? `- Error: \`${terminal.error_message}\`` : "",
+    "",
+    `Execution id: \`${executionId}\``,
+  ].filter(Boolean).join("\n");
+
+  console.log(summary);
+  process.exit(passed ? 0 : (terminal.status === "awaiting_human" ? 2 : 1));
+}
+
+// PRD_OPEN_SOURCE 2.2 — resume a task's previous claude session.
+async function cmdResume(taskId: string | undefined) {
+  if (!taskId) {
+    console.error(`Usage: agent-trail resume ${c.bold("<taskId>")}`);
+    process.exit(2);
+  }
+  const res = await apiFetch(`/api/tasks/${taskId}/resume`, { method: "POST" });
+  const body = await res.text();
+  if (!res.ok) {
+    console.error(`${c.red("✗")} ${body}`);
+    process.exit(1);
+  }
+  console.log(body);
 }

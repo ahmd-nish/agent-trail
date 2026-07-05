@@ -3,6 +3,7 @@
  * ask_human MCP server.
  * Spawned per-task via --mcp-config injection.
  * Required env: AGENT_TRAIL_DB_PATH, AGENT_TRAIL_TASK_ID, AGENT_TRAIL_EXECUTION_ID
+ *   (or the deprecated VIBE_BOARD_* equivalents for one release)
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -13,9 +14,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Database } from "bun:sqlite";
 
-const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"];
-const TASK_ID = process.env["AGENT_TRAIL_TASK_ID"];
-const EXECUTION_ID = process.env["AGENT_TRAIL_EXECUTION_ID"];
+const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
+const TASK_ID = process.env["AGENT_TRAIL_TASK_ID"] ?? process.env["VIBE_BOARD_TASK_ID"];
+const EXECUTION_ID = process.env["AGENT_TRAIL_EXECUTION_ID"] ?? process.env["VIBE_BOARD_EXECUTION_ID"];
 
 if (!DB_PATH || !TASK_ID || !EXECUTION_ID) {
   process.stderr.write(
@@ -27,7 +28,7 @@ if (!DB_PATH || !TASK_ID || !EXECUTION_ID) {
 const db = new Database(DB_PATH);
 
 const server = new Server(
-  { name: "agent-trail", version: "0.1.0" },
+  { name: "agent-trail", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 

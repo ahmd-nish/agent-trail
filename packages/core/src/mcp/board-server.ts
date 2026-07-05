@@ -7,7 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Database } from "bun:sqlite";
 
-const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"];
+const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
 if (!DB_PATH) {
   process.stderr.write("board-server MCP: missing AGENT_TRAIL_DB_PATH env var\n");
   process.exit(1);
@@ -16,7 +16,7 @@ if (!DB_PATH) {
 const db = new Database(DB_PATH);
 
 const server = new Server(
-  { name: "agent-trail-board", version: "0.1.0" },
+  { name: "agent-trail", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 

@@ -1,20 +1,25 @@
 {
   "name": "agent-trail",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Open-source kanban board for orchestrating Claude Code with MCP/skill assignment, TDD gates, and human decision tickets",
   "license": "MIT",
   "workspaces": ["packages/*"],
   "scripts": {
     "dev": "bun --filter '*' dev",
-    "dev:server": "bun --hot packages/server/src/index.ts",
+    "dev:server": "lsof -ti:3002 | xargs -r kill -9 2>/dev/null; sleep 0.3; bun --watch packages/server/src/index.ts",
     "dev:web": "bun run -F '@agent-trail/web' dev",
+    "dev:runner": "bun run -F '@agent-trail/runner' dev",
+    "start": "bun scripts/start-all.ts",
+    "stop": "bun scripts/stop-all.ts",
+    "status": "bun scripts/status-all.ts",
+    "reset:port": "lsof -ti:3002 | xargs -r kill -9 2>/dev/null; lsof -ti:3003 | xargs -r kill -9 2>/dev/null; echo 'ports 3002 + 3003 freed'",
     "build": "bun --filter '*' build",
     "test": "bun test",
     "lint": "biome check .",
     "format": "biome format --write .",
     "probe:claude": "bun scripts/probe-claude-code.ts",
-    "mcp:board": "AGENT_TRAIL_DB_PATH=$(pwd)/agent-trail.db bun packages/core/src/mcp/board-server.ts",
+    "mcp:board": "bun scripts/mcp-board.ts",
     "cli": "bun packages/cli/src/index.ts"
   },
   "devDependencies": {

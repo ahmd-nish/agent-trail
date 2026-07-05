@@ -1,0 +1,43 @@
+⏺ I have enough context to give you an honest assessment.                                                                                                                                    
+                                                                                          
+  Honest opinion on agent-trail                                                                                                                                                              
+                                                                                                                                                                                             
+  The good — this is a real, working v0.1                                                                                                                                                    
+                                                                                                                                                                                             
+  You actually shipped a 7-day MVP. ~4,700 LOC, 12 passing tests, end-to-end flow that works: PRD → planner → DAG → kanban → claude CLI execution in a worktree → SSE telemetry → SQLite     
+  persistence → ask_human MCP for HITL → post-run git diff artifacts → CLI + web UI + board MCP server. Architecture is coherent: planner and executor are cleanly separated, MCP config is
+  scoped per task, and the TDD gate (write_tests → implement → verify_tests) runs the verify phase deterministically without Claude — that's the right call.                                 
+                                                                                                                                                                                           
+  Specific things I like:                                                                                                                                                                    
+  - dag.ts:17 Kahn's algorithm with level-based parallelGroup assignment is clean and the cycle detection is honest.
+  - claude-code.ts:74 is a thin, sensible wrapper around the CLI — good resistance to the temptation to overbuild.                                                                           
+  - mcp-config.ts:43 writing a scoped MCP config per task is exactly the right primitive.                                                                                                  
+  - execution-manager.ts:120 board-run loop is small, readable, and correctly uses task-completion promises instead of polling.                                                              
+                                                                                                                                                                                             
+  The bad — what would worry me before v0.2                                                                                                                                                  
+                                                                                                                                                                                             
+  1. TaskDetail.tsx is 1,535 lines. That's 19 internal functions, 40 hooks, 16 pieces of state in one component. This will become the bottleneck for every future feature. Splitting it is   
+  the most valuable refactor you can do — atomic design preference is exactly what this calls for.                                                                                           
+  2. SQLite migrations as try { ALTER … } catch {} (db.ts:17-30). Works for v0.1, will bite you the moment you need a column rename, a backfill, or to drop something. Add a schema_version  
+  table now, before users have data you can't lose.                                                                                                                                          
+  3. ANTHROPIC_API_KEY is documented as required for the planner (README:64, cli/src/index.ts:281) but runClaudePlanner actually invokes the claude CLI, which authenticates via claude 
+  login, not the API key. The env-var prerequisite check is misleading dead code.                                                                                                            
+  4. AWAITING_HUMAN / PAUSE_EXECUTION are string-matched in the result text (execution-manager.ts:433). Brittle — the model might paraphrase. Better: detect that the ask_human tool was   
+  actually called in the telemetry stream.                                                                                                                                                   
+  5. No persistent run/queue. If the server crashes mid-execution, executions row stays running forever and the kanban is stuck. The board-run loop also doesn't survive restart. Single-user
+   dev tool today, but trivial issue to address before you advertise it.                                                                                                                     
+  6. Concurrency is bounded but unfair. MAX_CONCURRENT = 3 is enforced in-process, but start() returns { error } when full and _boardRunLoop treats that as terminal                       
+  (execution-manager.ts:151). A queue, not a hard rejection, is what you want.                                                                                                               
+  7. bypassPermissions is hard-coded (claude-code.ts:91). Reasonable default for an autonomous board, but worth a board-level setting before publishing — someone running this on a personal
+  machine will eventually regret it.                                                                                                                                                         
+  8. You have 3 board views (Kanban, DAG, Epic) plus a Dashboard. That's a lot of surface area for v0.1. The Epic view alone is 586 lines. Honest question: which one would you cut?       
+                                                                                                                                                                                             
+  The honest take                                                                                                                                                                          
+                                                                                                                                                                                             
+  This is a strong demo / weekend-builder portfolio piece that does something genuinely novel (orchestrating claude CLI on a task graph with HITL is not common). It is not a product yet —  
+  the lack of restart-safe execution, the giant TaskDetail, and the unsafe permission default are exactly the things that turn "looks cool in a screencast" into "broke when someone other
+  than me tried it." Fix those three before you npm publish v0.1.0 and start telling people to install it.                                                                                   
+                                                                                                                                                                                           
+  Stack choice (Bun + Hono + bun:sqlite + Vite + Tailwind) is excellent for what you're building — fast, minimal, and gets out of your way. Don't second-guess that.                         
+             
+  Net: I'd ship v0.1.0 with a "single-user, local-only, alpha" label, then make the three fixes above the v0.1.1 milestone before chasing Codex/Gemini adapters.  

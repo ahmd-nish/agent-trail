@@ -44,7 +44,8 @@ export class McpConfigManager {
     const allServers = this.readProjectConfig().mcpServers ?? {};
     const scoped: Record<string, McpServerDef> = {};
 
-    // Always include ask_human
+    // Always include ask_human. Emit both new + legacy env vars for one release
+    // so users mid-upgrade with stale spawned MCP processes keep working.
     scoped["agent-trail"] = {
       command: "bun",
       args: [askHuman.scriptPath],
@@ -52,6 +53,9 @@ export class McpConfigManager {
         AGENT_TRAIL_DB_PATH: askHuman.dbPath,
         AGENT_TRAIL_TASK_ID: askHuman.taskId,
         AGENT_TRAIL_EXECUTION_ID: askHuman.executionId,
+        VIBE_BOARD_DB_PATH: askHuman.dbPath,
+        VIBE_BOARD_TASK_ID: askHuman.taskId,
+        VIBE_BOARD_EXECUTION_ID: askHuman.executionId,
       },
     };
 

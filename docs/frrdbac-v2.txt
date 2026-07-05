@@ -1,0 +1,92 @@
+⏺ Materially better but still the same shape of project.                                                                    
+                                                                                                                            
+  What actually moved the needle                                                                                            
+                  
+  The execution path is no longer a black box. 45 tests now cover the queue, cancellation, telemetry parsing, and DB        
+  defaults — that's the gap that mattered most, because it's the code that orchestrates Claude. The stop button +         
+  cancellation semantics close the only really embarrassing UX hole (stuck in_progress forever). And the slot-reservation   
+  race I found while writing the tests was a real bug — silent today, but it would have surfaced the moment two users on the
+   same machine, or one fast-clicker, used the board.
+                                                                                                                          
+  So: ship-credibility went up a real notch. Before, I'd have said "alpha, single-user, expect it to break." Now I'd say    
+  "v0.1.0, single-user, the obvious things work."                                                                         
+                                                                                                                            
+  What I didn't fix and you should know about                                                                               
+                  
+  1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
+   server name (vibe-board), ~/vibe-board-runs/, env var VIBE_BOARD_DB_PATH, package names (@vibe-board/*), and console logs
+   all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called  
+  agent-trail. Pick a name, run a sed pass.                                          
+  2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
+  user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.                
+  3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
+  pass, runtime is fine, but bunx tsc is noisy. Worth a dedicated cleanup pass, maybe with claude — these are mostly        
+  mechanical ?? null or | undefined additions.                                       
+
+  1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
+   server name (vibe-board), ~/vibe-board-runs/, env var VIBE_BOARD_DB_PATH, package names (@vibe-board/*), and console logs
+   all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called
+  agent-trail. Pick a name, run a sed pass.
+  2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
+  user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.
+  3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
+  pass, runtime is fine, but bunx tsc is noisy. Worth a dedicated cleanup pass, maybe with claude — these are mostly
+  mechanical ?? null or | undefined additions.
+  4. No UI test of the new Stop button or inline-input. I wrote the code, I read the surrounding components, I'm reasonably
+  confident — but I didn't open a browser. If you start the dev server and click around, that's the 5-minute verification I
+  owe you.
+  5. Test coverage is no longer zero but still narrow. Webhook, post-execution artifacts, scope runner, dev-server adoption,
+   the planner end-to-end (vs. unit), the React components — all still untested.
+
+  The honest take, second pass
+
+  This is still a portfolio-grade tool, not a product. But it's now a portfolio-grade tool that passes its own tests on the
+  part that does real work — which is the difference between "looks cool" and "I trust this enough to use it on Saturday."
+  The remaining gaps are scope and polish, not architecture.
+   all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called
+  agent-trail. Pick a name, run a sed pass.
+  2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
+  user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.
+  3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
+  pass, runtime is fine, but bunx tsc is noisy. Worth a dedicated cleanup pass, maybe with claude — these are mostly
+  mechanical ?? null or | undefined additions.
+  4. No UI test of the new Stop button or inline-input. I wrote the code, I read the surrounding components, I'm reasonably
+  confident — but I didn't open a browser. If you start the dev server and click around, that's the 5-minute verification I
+  owe you.
+  5. Test coverage is no longer zero but still narrow. Webhook, post-execution artifacts, scope runner, dev-server adoption,
+   the planner end-to-end (vs. unit), the React components — all still untested.
+
+  The honest take, second pass
+
+  This is still a portfolio-grade tool, not a product. But it's now a portfolio-grade tool that passes its own tests on the
+  part that does real work — which is the difference between "looks cool" and "I trust this enough to use it on Saturday."
+
+  1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
+
+  1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
+   server name (vibe-board), ~/vibe-board-runs/, env var VIBE_BOARD_DB_PATH, package names (@vibe-board/*), and console logs
+   all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called
+  agent-trail. Pick a name, run a sed pass.
+  2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
+  user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.
+  3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
+  pass, runtime is fine, but bunx tsc is noisy. Worth a dedicated cleanup pass, maybe with claude — these are mostly
+  mechanical ?? null or | undefined additions.
+  4. No UI test of the new Stop button or inline-input. I wrote the code, I read the surrounding components, I'm reasonably
+  confident — but I didn't open a browser. If you start the dev server and click around, that's the 5-minute verification I
+  owe you.
+  5. Test coverage is no longer zero but still narrow. Webhook, post-execution artifacts, scope runner, dev-server adoption,
+   the planner end-to-end (vs. unit), the React components — all still untested.
+
+  The honest take, second pass
+
+  This is still a portfolio-grade tool, not a product. But it's now a portfolio-grade tool that passes its own tests on the
+  part that does real work — which is the difference between "looks cool" and "I trust this enough to use it on Saturday."
+  The remaining gaps are scope and polish, not architecture.
+
+  If I were you, the next two-hour window I'd spend on this would be:
+  1. Commit to a name and do the sed pass (15 min).
+  2. Add a 20-min default execution timeout with a Board setting override (30 min).
+  3. Open the dev server, do the click-through I skipped, fix whatever's wonky (45 min).
+
+  Then publish v0.1.0 with no apologies. The Codex/Gemini adapters and the larger UI overhaul can be v0.2.

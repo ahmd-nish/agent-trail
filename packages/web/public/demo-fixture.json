@@ -1,0 +1,96 @@
+{
+  "board": {
+    "id": "demo-board",
+    "name": "Demo — URL Shortener"
+  },
+  "tasks": [
+    {
+      "id": "demo-t1",
+      "title": "Design SQLite schema",
+      "priority": "high",
+      "modelTier": "haiku",
+      "tddEnabled": true,
+      "dependsOn": [],
+      "epic": "Storage"
+    },
+    {
+      "id": "demo-t2",
+      "title": "Build POST /shorten endpoint",
+      "priority": "high",
+      "modelTier": "sonnet",
+      "tddEnabled": true,
+      "dependsOn": ["demo-t1"],
+      "epic": "API"
+    },
+    {
+      "id": "demo-t3",
+      "title": "Build GET /r/:code redirect",
+      "priority": "high",
+      "modelTier": "sonnet",
+      "tddEnabled": true,
+      "dependsOn": ["demo-t1"],
+      "epic": "API"
+    },
+    {
+      "id": "demo-t4",
+      "title": "Build GET /stats/:code",
+      "priority": "medium",
+      "modelTier": "sonnet",
+      "tddEnabled": true,
+      "dependsOn": ["demo-t2", "demo-t3"],
+      "epic": "API"
+    }
+  ],
+  "timeline": [
+    { "delayMs": 300,  "action": "task_status", "taskId": "demo-t1", "status": "in_progress" },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t1", "event": { "type": "connected", "executionId": "demo-exec-1" } },
+    { "delayMs": 400,  "action": "sse", "taskId": "demo-t1", "event": { "type": "text", "text": "Analyzing PRD... need to design a compact SQLite schema for URLs + click counts." } },
+    { "delayMs": 600,  "action": "sse", "taskId": "demo-t1", "event": { "type": "tool_call", "tool": "Write" } },
+    { "delayMs": 800,  "action": "sse", "taskId": "demo-t1", "event": { "type": "tool_result", "isError": false } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t1", "event": { "type": "text", "text": "Schema written: urls(short_code PRIMARY KEY, long_url, click_count DEFAULT 0, created_at)." } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t1", "event": { "type": "tool_call", "tool": "Bash" } },
+    { "delayMs": 900,  "action": "sse", "taskId": "demo-t1", "event": { "type": "test_result", "passed": true, "exitCode": 0, "output": "1 pass · 0 fail" } },
+    { "delayMs": 400,  "action": "sse", "taskId": "demo-t1", "event": { "type": "execution_complete", "status": "completed", "executionId": "demo-exec-1" } },
+    { "delayMs": 300,  "action": "task_status", "taskId": "demo-t1", "status": "done" },
+
+    { "delayMs": 400,  "action": "task_status", "taskId": "demo-t2", "status": "in_progress" },
+    { "delayMs": 400,  "action": "task_status", "taskId": "demo-t3", "status": "in_progress" },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t2", "event": { "type": "connected", "executionId": "demo-exec-2" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t3", "event": { "type": "connected", "executionId": "demo-exec-3" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t2", "event": { "type": "text", "text": "Writing failing test for POST /shorten first (TDD gate)…" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t2", "event": { "type": "tool_call", "tool": "Write" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t2", "event": { "type": "tool_result", "isError": false } },
+    { "delayMs": 600,  "action": "sse", "taskId": "demo-t3", "event": { "type": "text", "text": "Redirect handler with 302 + async click_count increment." } },
+    { "delayMs": 400,  "action": "sse", "taskId": "demo-t3", "event": { "type": "tool_call", "tool": "Edit" } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t3", "event": { "type": "tool_result", "isError": false } },
+    { "delayMs": 600,  "action": "sse", "taskId": "demo-t2", "event": { "type": "test_result", "passed": false, "exitCode": 1, "output": "1 fail · TypeError: undefined shortCode" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t2", "event": { "type": "text", "text": "Test failed — implementing to green." } },
+    { "delayMs": 600,  "action": "sse", "taskId": "demo-t2", "event": { "type": "tool_call", "tool": "Edit" } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t2", "event": { "type": "tool_result", "isError": false } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t2", "event": { "type": "test_result", "passed": true, "exitCode": 0, "output": "3 pass · 0 fail" } },
+
+    { "delayMs": 400,  "action": "sse", "taskId": "demo-t3", "event": { "type": "text", "text": "Need to decide: should invalid codes return 404 or a friendly HTML error page?" } },
+    { "delayMs": 300,  "action": "ask_human", "taskId": "demo-t3", "question": "Should invalid short codes return 404 JSON or a friendly HTML error page?", "context": "The API otherwise responds with JSON, so JSON is more consistent. But this endpoint is user-facing (people paste short links in browsers), so an HTML page would degrade more gracefully.", "options": [
+      { "label": "JSON 404 (consistent with rest of API)", "value": "json-404" },
+      { "label": "Friendly HTML error page", "value": "html-error" }
+    ] },
+
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t3", "event": { "type": "text", "text": "Applying decision — implementing the chosen error response." } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t3", "event": { "type": "tool_call", "tool": "Edit" } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t3", "event": { "type": "tool_result", "isError": false } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t3", "event": { "type": "test_result", "passed": true, "exitCode": 0, "output": "5 pass · 0 fail" } },
+    { "delayMs": 400,  "action": "sse", "taskId": "demo-t2", "event": { "type": "execution_complete", "status": "completed", "executionId": "demo-exec-2" } },
+    { "delayMs": 300,  "action": "task_status", "taskId": "demo-t2", "status": "done" },
+    { "delayMs": 400,  "action": "sse", "taskId": "demo-t3", "event": { "type": "execution_complete", "status": "completed", "executionId": "demo-exec-3" } },
+    { "delayMs": 300,  "action": "task_status", "taskId": "demo-t3", "status": "done" },
+
+    { "delayMs": 400,  "action": "task_status", "taskId": "demo-t4", "status": "in_progress" },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t4", "event": { "type": "connected", "executionId": "demo-exec-4" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t4", "event": { "type": "text", "text": "GET /stats/:code — SELECT click_count, created_at from urls." } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t4", "event": { "type": "tool_call", "tool": "Edit" } },
+    { "delayMs": 700,  "action": "sse", "taskId": "demo-t4", "event": { "type": "tool_result", "isError": false } },
+    { "delayMs": 600,  "action": "sse", "taskId": "demo-t4", "event": { "type": "test_result", "passed": true, "exitCode": 0, "output": "8 pass · 0 fail — all green" } },
+    { "delayMs": 500,  "action": "sse", "taskId": "demo-t4", "event": { "type": "execution_complete", "status": "completed", "executionId": "demo-exec-4" } },
+    { "delayMs": 300,  "action": "task_status", "taskId": "demo-t4", "status": "done" }
+  ]
+}

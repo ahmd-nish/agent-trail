@@ -34,39 +34,55 @@ export function DecisionTicket({ ticket, onAnswered }: Props) {
 
   if (ticket.answer !== null) {
     return (
-      <div className="bg-slate-800 border border-slate-600 rounded-lg p-3">
-        <p className="text-xs text-slate-400 mb-1">Decision answered</p>
-        <p className="text-xs text-slate-300 italic">{ticket.question}</p>
-        <p className="text-xs text-emerald-400 mt-1">→ {ticket.answer}</p>
+      <div className="px-3 py-2 rounded" style={{ background: "var(--bg-panel)", border: "1px solid var(--line)" }}>
+        <p style={{ fontSize: 10, color: "var(--fg-faded)", marginBottom: 3 }}>decision answered</p>
+        <p style={{ fontSize: 11, color: "var(--fg-dim)", fontStyle: "italic" }}>{ticket.question}</p>
+        <p style={{ fontSize: 11, color: "var(--green)", marginTop: 4 }}>→ {ticket.answer}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-amber-950/40 border border-amber-700/50 rounded-lg p-3 flex flex-col gap-2">
+    <div
+      className="flex flex-col gap-2 px-3 py-3 rounded ask-human-glow"
+      style={{ background: "var(--amber-dim)", border: "1px solid rgba(255,180,84,0.35)" }}
+    >
       <div className="flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-        <span className="text-xs font-semibold text-amber-400">Awaiting your input</span>
+        <span className="w-1.5 h-1.5 rounded-full col-active-dot" style={{ background: "var(--amber)", flexShrink: 0 }} />
+        <span style={{ fontSize: 10, color: "var(--amber)", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" as const }}>awaiting your input</span>
       </div>
-      <p className="text-sm text-slate-100">{ticket.question}</p>
+
+      <p style={{ fontSize: 11, color: "var(--fg)", lineHeight: 1.5 }}>{ticket.question}</p>
+
       {ticket.context && (
-        <p className="text-xs text-slate-400 leading-relaxed">{ticket.context}</p>
+        <p style={{ fontSize: 10, color: "var(--fg-dim)", lineHeight: 1.6 }}>{ticket.context}</p>
       )}
-      <div className="flex gap-2 mt-1">
+
+      <div className="flex gap-2 mt-0.5">
         <input
           autoFocus
-          placeholder="Your answer…"
+          placeholder="your answer…"
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && submit()}
-          className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+          className="flex-1 focus:outline-none"
+          style={{
+            background: "var(--bg)",
+            border: "1px solid rgba(255,180,84,0.4)",
+            color: "var(--fg)",
+            fontFamily: "inherit",
+            fontSize: 11,
+            borderRadius: 2,
+            padding: "4px 8px",
+          }}
         />
         <button
           onClick={submit}
           disabled={submitting || !answer.trim()}
-          className="text-sm px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-medium"
+          className="claw-btn amber"
+          style={{ fontSize: 10, opacity: submitting || !answer.trim() ? 0.4 : 1 }}
         >
-          {submitting ? "…" : "Answer"}
+          {submitting ? "…" : "answer"}
         </button>
       </div>
     </div>

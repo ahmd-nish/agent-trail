@@ -1,0 +1,59 @@
+# PRD_OPEN_SOURCE 2.7 — headless CI example.
+#
+# Runs a single agent-trail task in GitHub Actions. The runner spins up the
+# server, then `agent-trail run --task <id> --ci` blocks until the task
+# reaches a terminal state and prints a markdown summary that the workflow
+# pipes into $GITHUB_STEP_SUMMARY.
+#
+# Requirements on the runner:
+#   • bun ≥ 1.1
+#   • claude CLI (or a fallback via env-based mock for demo runs)
+#   • ANTHROPIC_API_KEY (or `claude login` on a self-hosted runner)
+#   • gh CLI + GITHUB_TOKEN — only if the board has autoPr enabled
+
+name: agent-trail
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "agent-trail task id to run"
+        required: true
+
+jobs:
+  run-task:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with: { bun-version: latest }
+
+      - name: Install claude CLI
+        run: curl -fsSL https://claude.ai/install.sh | bash
+
+      - name: Install agent-trail
+        run: npm i -g agent-trail
+
+      - name: Start agent-trail server
+        run: |
+          nohup agent-trail --no-open > /tmp/at.log 2>&1 &
+          # Wait for /api/health
+          for _ in {1..30}; do
+            curl -sf http://localhost:3002/api/health && break || sleep 1
+          done
+
+      - name: Run task (headless)
+        id: run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set +e
+          agent-trail run --task ${{ inputs.task_id }} --ci --timeout 1500 | tee "$GITHUB_STEP_SUMMARY"
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Fail the workflow if task didn't complete
+        if: steps.run.outputs.exit != '0'
+        run: |
+          echo "task exited ${{ steps.run.outputs.exit }}"
+          exit ${{ steps.run.outputs.exit }}

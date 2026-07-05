@@ -6,6 +6,11 @@
   "bin": {
     "agent-trail": "./src/index.ts"
   },
+  "files": [
+    "src",
+    "examples",
+    "agents"
+  ],
   "dependencies": {
     "@agent-trail/core": "workspace:*"
   }

@@ -14,3 +14,9 @@ coverage/
 .vscode/
 .idea/
 probe-output/
+
+# Internal strategy docs — never public
+docs/internal/
+.worktrees/
+~/
+vibe-board.db*

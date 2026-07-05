@@ -4,6 +4,21 @@ import type {
 } from "../types/stream-json.ts";
 import type { TelemetryEventKind } from "../types/index.ts";
 
+/**
+ * PRD_OPEN_SOURCE 2.1 — stream-json compat layer.
+ *
+ * Version this parser bumps every time we accept a breaking change to the
+ * claude-CLI stream-json schema. `packages/core/src/telemetry/fixtures/*.jsonl`
+ * holds recorded lines for each parser version we support; the golden test
+ * runs every fixture through the parser and fails if any recognised event
+ * type stops parsing. That's our schema-drift alarm — a CLI upgrade that
+ * broke us would flip red before landing.
+ */
+export const STREAM_JSON_PARSER_VERSION = "1.0.0";
+export const SUPPORTED_CLAUDE_CODE_VERSIONS = [
+  "1.x", // wildcard for the current 1.x line — bump when a breaking event lands
+];
+
 export interface ParsedTelemetry {
   kind: TelemetryEventKind;
   toolName: string | null;
