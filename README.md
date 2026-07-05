@@ -6,7 +6,7 @@ Drop a PRD → get a structured task graph → watch Claude Code execute each ta
 
 **Status:** v1.0.0 · MIT licensed · local-first (SQLite, nothing leaves your machine)
 
-<!-- DEMO GIF HERE — cinematic feed: PRD drop → agents running → decision ticket → tests green -->
+![agent-trail — kanban board with parallel Claude Code agents, live activity feed, and a mascot narrator](docs/agent-trail-demo.gif)
 
 ---
 
@@ -30,6 +30,7 @@ Running one coding agent in a terminal is easy. Running *several*, on real work,
 - **Board MCP server** — the board itself is an MCP server, so Claude Code can manage tasks programmatically
 - **Run the whole board** — ▶ Run all executes the backlog in DAG order
 - **Webhooks** — notifications on completion, failure, and awaiting-human
+- **Scout mascot** — pixel-art walkman narrator with mood animations and a deterministic quip engine (`quips.yaml`), zero LLM calls; click to see live board state
 
 ## Prerequisites
 

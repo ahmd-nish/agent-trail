@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import type { Task } from "../../../core/src/types/index.ts";
+import type { Tone } from "../lib/quips.ts";
+import { computeScoutState } from "../lib/scout-state.ts";
 
 const DISMISS_KEY = "agent-trail:scout-hidden";
 
@@ -314,9 +317,28 @@ const TRANSITION_MS = 900;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-interface Props { beat: Beat }
+interface Props {
+  beat: Beat;
+  /** Optional quip that overrides the default beat line while it's active
+   *  (2.10 joke engine). Nulls out after its own TTL upstream. */
+  quip?: string | null;
+  /** Live tone setting (playful/dry/off) — shown as a segmented control in
+   *  the state card. */
+  tone?: Tone;
+  onToneChange?: (t: Tone) => void;
+  /** State-display card open? Controlled by the parent so keyboard shortcuts
+   *  and outside-clicks can close it. */
+  statusOpen?: boolean;
+  onToggleStatus?: () => void;
+  /** Live task list — pulled straight into the state card. */
+  tasks?: readonly Task[];
+  runStats?: { activeCount: number; queuedCount: number; maxConcurrent: number } | null;
+}
 
-export function Scout({ beat }: Props) {
+export function Scout({
+  beat, quip, tone, onToneChange,
+  statusOpen, onToggleStatus, tasks, runStats,
+}: Props) {
   const [bubbleKey, setBubbleKey] = useState(0);
   const [frameIdx, setFrameIdx] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
@@ -324,12 +346,17 @@ export function Scout({ beat }: Props) {
     try { return localStorage.getItem(DISMISS_KEY) === "1"; } catch { return false; }
   });
   const line = LINES[beat];
+  // Quip overrides beat text while active but keeps the current mood.
+  const displayText = quip ?? line.text;
   const prevMood = useRef<Mood>(line.mood);
 
   useEffect(() => {
     setBubbleKey((k) => k + 1);
     setFrameIdx(0);
   }, [beat]);
+
+  // Re-key bubble on quip changes so the pop animation replays.
+  useEffect(() => { if (quip) setBubbleKey((k) => k + 1); }, [quip]);
 
   useEffect(() => {
     if (prevMood.current === line.mood) return;
@@ -373,12 +400,30 @@ export function Scout({ beat }: Props) {
       className="fixed bottom-6 left-6 z-[60] flex items-center gap-3"
       data-testid="scout-mascot"
     >
-      <Walkman frame={frame} cfg={cfg} dimmed={transitioning} dismiss={dismiss} />
+      <div
+        onClick={onToggleStatus}
+        role={onToggleStatus ? "button" : undefined}
+        aria-label={onToggleStatus ? "Toggle Scout status" : undefined}
+        style={{ cursor: onToggleStatus ? "pointer" : "default" }}
+        data-testid="scout-body"
+      >
+        <Walkman frame={frame} cfg={cfg} dimmed={transitioning} dismiss={dismiss} />
+      </div>
 
-      {line.text && (
+      {statusOpen ? (
+        <StatusCard
+          tasks={tasks ?? []}
+          runStats={runStats ?? null}
+          tone={tone}
+          onToneChange={onToneChange}
+          onClose={onToggleStatus}
+          ledColor={cfg.ledColor}
+        />
+      ) : displayText ? (
         <div
           key={bubbleKey}
           className="rounded-lg px-3 py-2 max-w-xs scout-bubble-pop"
+          data-testid={quip ? "scout-quip" : "scout-narration"}
           style={{
             background: "var(--bg-pane)",
             border: `1.5px solid ${cfg.ledColor}`,
@@ -393,12 +438,119 @@ export function Scout({ beat }: Props) {
             transition: `border-color ${TRANSITION_MS}ms ease, box-shadow ${TRANSITION_MS}ms ease`,
           }}
         >
-          {line.text}
+          {displayText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── State-display card (2.10c) ──────────────────────────────────────────────
+// Rendered directly from live tasks + runStats. Zero LLM, always accurate.
+
+function StatusCard({
+  tasks, runStats, tone, onToneChange, onClose, ledColor,
+}: {
+  tasks: readonly Task[];
+  runStats: { activeCount: number; queuedCount: number; maxConcurrent: number } | null;
+  tone: Tone | undefined;
+  onToneChange: ((t: Tone) => void) | undefined;
+  onClose: (() => void) | undefined;
+  ledColor: string;
+}) {
+  const s = computeScoutState(tasks, runStats);
+
+  return (
+    <div
+      className="rounded-lg px-3 py-2 scout-bubble-pop"
+      data-testid="scout-status"
+      style={{
+        background: "var(--bg-pane)",
+        border: `1.5px solid ${ledColor}`,
+        color: "var(--fg)",
+        fontSize: 11,
+        lineHeight: 1.45,
+        minWidth: 220,
+        maxWidth: 260,
+        boxShadow: `0 4px 20px rgba(0,0,0,0.45), 0 0 14px ${ledColor}44`,
+        transform: "translateY(3px)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontWeight: 600, fontSize: 11, letterSpacing: 0.4, textTransform: "uppercase", opacity: 0.75 }}>
+          Board state
+        </span>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Close status"
+            style={{
+              background: "transparent", border: "none", color: "var(--fg)",
+              cursor: "pointer", opacity: 0.6, padding: 0,
+            }}
+          >
+            <X size={12} strokeWidth={2.5} />
+          </button>
+        )}
+      </div>
+
+      <table style={{ width: "100%", marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+        <tbody>
+          <StatusRow label="Total tasks"   value={String(s.total)} />
+          <StatusRow label="In progress"   value={String(s.inProgress)} />
+          <StatusRow label="Done"          value={`${s.done}/${s.total}`} />
+          <StatusRow label="Awaiting you"  value={String(s.decisionCount)} highlight={s.decisionCount > 0 ? ledColor : undefined} />
+          {s.runStats && (
+            <StatusRow
+              label="Runner"
+              value={`${s.runStats.activeCount}/${s.runStats.maxConcurrent} active · ${s.runStats.queuedCount} queued`}
+            />
+          )}
+          {s.running && (
+            <StatusRow label="Now"          value={s.running.title.slice(0, 42)} />
+          )}
+          {s.runningPhase && (
+            <StatusRow label="Phase"        value={s.runningPhase} />
+          )}
+        </tbody>
+      </table>
+
+      {onToneChange && (
+        <div style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ opacity: 0.6, fontSize: 10 }}>tone</span>
+          {(["playful", "dry", "off"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => onToneChange(t)}
+              data-testid={`scout-tone-${t}`}
+              style={{
+                fontSize: 10,
+                padding: "2px 6px",
+                borderRadius: 3,
+                border: `1px solid ${tone === t ? ledColor : "var(--border)"}`,
+                background: tone === t ? `${ledColor}22` : "transparent",
+                color: "var(--fg)",
+                cursor: "pointer",
+              }}
+            >
+              {t}
+            </button>
+          ))}
         </div>
       )}
     </div>
   );
 }
+
+function StatusRow({ label, value, highlight }: { label: string; value: string; highlight?: string }) {
+  return (
+    <tr>
+      <td style={{ opacity: 0.65, paddingRight: 8, whiteSpace: "nowrap" }}>{label}</td>
+      <td style={{ textAlign: "right", fontWeight: 500, color: highlight ?? undefined }}>{value}</td>
+    </tr>
+  );
+}
+
 
 // ─── Walkman body — matches the reference art ────────────────────────────────
 

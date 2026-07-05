@@ -21,6 +21,7 @@ import { makeDemoPlayer, installDemoIntercept, type DecisionPause } from "./lib/
 import { DemoOverlay } from "./components/DemoOverlay.tsx";
 import { CostOdometer } from "./components/CostOdometer.tsx";
 import { Scout, type ScoutBeat } from "./components/Scout.tsx";
+import { useScoutQuips } from "./lib/useScoutQuips.ts";
 
 type View = "board" | "dag" | "epics" | "dashboard";
 type LaunchState = "idle" | "launching" | "running";
@@ -296,6 +297,10 @@ export function App() {
     if (tasks.length > 0 && tasks.every((t) => t.status === "done" || t.status === "in_review")) return "celebrating";
     return "idle";
   })();
+
+  // 2.10 — Scout quip engine (event-driven) + click-to-see state.
+  const { quip, tone, setTone } = useScoutQuips(tasks);
+  const [scoutStatusOpen, setScoutStatusOpen] = useState(false);
 
   const handlePlanResult = useCallback((result: { board: { id: string; name: string } | null; tasks: Task[] }) => {
     if (result.board) {
@@ -580,8 +585,19 @@ export function App() {
 
       {/* Scout mascot — always visible (dismissable per-browser via localStorage).
           PRD 1.16 stretch: beat is derived from real board state, or demo state
-          when the replay is running. */}
-      <Scout beat={scoutBeat} />
+          when the replay is running. PRD 2.10 stretch: quip overrides the
+          default beat line when an event fires; clicking Scout opens a
+          state-display card rendered from live task state. */}
+      <Scout
+        beat={scoutBeat}
+        quip={quip}
+        tone={tone}
+        onToneChange={setTone}
+        statusOpen={scoutStatusOpen}
+        onToggleStatus={() => setScoutStatusOpen((v) => !v)}
+        tasks={tasks}
+        runStats={runStats}
+      />
 
       {demoActive && (
         <DemoOverlay
