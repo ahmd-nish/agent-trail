@@ -48,8 +48,8 @@ boardsRouter.post("/", async (c) => {
     : defaultImplementationDir(body.name.trim());
 
   db.query(
-    "INSERT INTO boards (id, name, prd_source, permission_mode, implementation_dir, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(id, body.name.trim(), body.prdSource ?? null, DEFAULT_PERMISSION_MODE, implDir, now, now);
+    "INSERT INTO boards (id, name, prd_source, permission_mode, implementation_dir, approved_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  ).run(id, body.name.trim(), body.prdSource ?? null, DEFAULT_PERMISSION_MODE, implDir, now, now, now);
 
   const board = db.query("SELECT * FROM boards WHERE id = ?").get(id) as Parameters<typeof rowToBoard>[0];
   return c.json(rowToBoard(board), 201);
@@ -162,9 +162,29 @@ boardsRouter.patch("/:boardId", async (c) => {
 
 boardsRouter.post("/:boardId/run", async (c) => {
   const { boardId } = c.req.param();
+  // §C plan-review gate — refuse to start a batch run when the plan hasn't
+  // been approved yet. Single-task /execute is gated in tasks.ts.
+  const board = getDb().query("SELECT approved_at FROM boards WHERE id = ?").get(boardId) as { approved_at: string | null } | null;
+  if (!board) return c.json({ error: "board not found" }, 404);
+  if (!board.approved_at) return c.json({ error: "board pending plan approval — POST /api/boards/:id/approve first" }, 403);
   const result = await executionManager.runBoard(boardId);
   if ("error" in result) return c.json({ error: result.error }, 400);
   return c.json(result);
+});
+
+// §C plan-review approval. Idempotent — approving an already-approved board
+// is a no-op; the returned board reflects the current state either way.
+boardsRouter.post("/:boardId/approve", (c) => {
+  const { boardId } = c.req.param();
+  const db = getDb();
+  const board = db.query("SELECT * FROM boards WHERE id = ?").get(boardId) as Parameters<typeof rowToBoard>[0] | null;
+  if (!board) return c.json({ error: "board not found" }, 404);
+  if (!board.approved_at) {
+    const now = new Date().toISOString();
+    db.query("UPDATE boards SET approved_at = ?, updated_at = ? WHERE id = ?").run(now, now, boardId);
+  }
+  const updated = db.query("SELECT * FROM boards WHERE id = ?").get(boardId) as Parameters<typeof rowToBoard>[0];
+  return c.json(rowToBoard(updated));
 });
 
 boardsRouter.get("/:boardId/running", (c) => {
@@ -194,6 +214,148 @@ boardsRouter.post("/:boardId/run-scope", async (c) => {
   if ("error" in result) return c.json({ error: result.error }, 400);
   return c.json(result);
 });
+
+// PRD_OPEN_SOURCE §4.6 — token/cost dashboard. Per-tier breakdown across
+// every execution on the board + "vs naive baseline" delta (what the board
+// would have cost if every task ran on Sonnet). Powers the top-of-board
+// cost card and any future CI budgets.
+import { PRICING, costForTier } from "../../../core/src/planner/pricing.ts";
+import type { ModelTier } from "../../../core/src/types/index.ts";
+
+boardsRouter.get("/:boardId/cost", (c) => {
+  const { boardId } = c.req.param();
+  const rows = getDb().query(`
+    SELECT
+      COALESCE(t.model_tier, 'sonnet')            AS tier,
+      COALESCE(SUM(e.total_input_tokens), 0)      AS input_tokens,
+      COALESCE(SUM(e.total_output_tokens), 0)     AS output_tokens,
+      COUNT(e.id)                                 AS executions
+    FROM tasks t
+    LEFT JOIN executions e
+      ON e.task_id = t.id
+     AND e.status IN ('completed', 'failed', 'awaiting_human')
+    WHERE t.board_id = ?
+    GROUP BY tier
+  `).all(boardId) as Array<{ tier: string; input_tokens: number; output_tokens: number; executions: number }>;
+
+  const byTier = rows.map((r) => ({
+    tier: r.tier as ModelTier,
+    inputTokens: Number(r.input_tokens ?? 0),
+    outputTokens: Number(r.output_tokens ?? 0),
+    executions: Number(r.executions ?? 0),
+    usd: Number(costForTier(r.tier as ModelTier, Number(r.input_tokens ?? 0), Number(r.output_tokens ?? 0)).toFixed(4)),
+  }));
+
+  const totalInput  = byTier.reduce((s, r) => s + r.inputTokens, 0);
+  const totalOutput = byTier.reduce((s, r) => s + r.outputTokens, 0);
+  const totalUsd    = byTier.reduce((s, r) => s + r.usd, 0);
+
+  // "Naive baseline" = all traffic priced at Sonnet. Savings > 0 when we
+  // downshifted anything to Haiku; savings < 0 when Opus escalations pulled
+  // the bill up.
+  const baselineUsd = costForTier("sonnet", totalInput, totalOutput);
+  const savingsUsd  = baselineUsd - totalUsd;
+
+  return c.json({
+    boardId,
+    byTier,
+    totals: {
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      usd: Number(totalUsd.toFixed(4)),
+      executions: byTier.reduce((s, r) => s + r.executions, 0),
+    },
+    baseline: {
+      description: "cost if every task ran on Sonnet",
+      usd: Number(baselineUsd.toFixed(4)),
+      savingsUsd: Number(savingsUsd.toFixed(4)),
+      savingsPct: baselineUsd > 0 ? Number(((savingsUsd / baselineUsd) * 100).toFixed(1)) : 0,
+    },
+    pricing: PRICING,
+  });
+});
+
+// PRD_OPEN_SOURCE §5.5 — loop observability. Per-task counters (iterations,
+// escalations, thrash tickets, iterations-to-green) + board aggregates so
+// the UI can show "loop 2/5, cost $0.12" and CI can watch escalation rates.
+boardsRouter.get("/:boardId/loop-metrics", (c) => {
+  const { boardId } = c.req.param();
+  const db = getDb();
+  const tasks = db.query(
+    "SELECT id, title, status, model_tier, failed_verify_count, created_at FROM tasks WHERE board_id = ?",
+  ).all(boardId) as Array<{
+    id: string; title: string; status: string; model_tier: string | null;
+    failed_verify_count: number | null; created_at: string;
+  }>;
+
+  const perTask = tasks.map((t) => {
+    const verifyRuns = db.query(
+      "SELECT COUNT(*) AS n FROM executions WHERE task_id = ? AND tdd_phase = 'verify_tests'",
+    ).get(t.id) as { n: number };
+    const verifyFailures = db.query(
+      "SELECT COUNT(*) AS n FROM executions WHERE task_id = ? AND tdd_phase = 'verify_tests' AND status = 'failed'",
+    ).get(t.id) as { n: number };
+    const iterations = (db.query(
+      "SELECT COUNT(*) AS n FROM iteration_memories WHERE task_id = ?",
+    ).get(t.id) as { n: number }).n;
+    const thrashTickets = (db.query(
+      "SELECT COUNT(*) AS n FROM decision_tickets WHERE task_id = ? AND question LIKE '%thrashing%'",
+    ).get(t.id) as { n: number }).n;
+    const cost = (db.query(
+      `SELECT COALESCE(SUM(total_input_tokens), 0) AS in_toks,
+              COALESCE(SUM(total_output_tokens), 0) AS out_toks
+       FROM executions WHERE task_id = ?`,
+    ).get(t.id) as { in_toks: number; out_toks: number });
+    const firstGreen = db.query(
+      `SELECT MIN(finished_at) AS at FROM executions
+       WHERE task_id = ? AND tdd_phase = 'verify_tests' AND status = 'completed'`,
+    ).get(t.id) as { at: string | null };
+    const timeToGreenMs = firstGreen?.at
+      ? Math.max(0, new Date(firstGreen.at).getTime() - new Date(t.created_at).getTime())
+      : null;
+
+    return {
+      taskId: t.id,
+      title: t.title,
+      status: t.status,
+      currentTier: t.model_tier ?? "sonnet",
+      iterationsRecorded: iterations,
+      verifyRuns: verifyRuns.n,
+      verifyFailures: verifyFailures.n,
+      failedVerifyCount: t.failed_verify_count ?? 0,
+      thrashTickets,
+      inputTokens: cost.in_toks,
+      outputTokens: cost.out_toks,
+      timeToFirstGreenMs: timeToGreenMs,
+    };
+  });
+
+  const completed = perTask.filter((p) => p.status === "in_review" || p.status === "done");
+  const medianTimeToGreen = median(
+    completed.map((p) => p.timeToFirstGreenMs).filter((v): v is number => v != null),
+  );
+  const escalatedTasks = perTask.filter((p) => p.currentTier === "opus").length;
+
+  return c.json({
+    boardId,
+    perTask,
+    aggregates: {
+      totalTasks: perTask.length,
+      completedTasks: completed.length,
+      escalatedToOpus: escalatedTasks,
+      thrashTicketsTotal: perTask.reduce((s, p) => s + p.thrashTickets, 0),
+      iterationsTotal: perTask.reduce((s, p) => s + p.iterationsRecorded, 0),
+      medianTimeToFirstGreenMs: medianTimeToGreen,
+    },
+  });
+});
+
+function median(nums: number[]): number | null {
+  if (nums.length === 0) return null;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? Math.round((s[mid - 1]! + s[mid]!) / 2) : s[mid]!;
+}
 
 boardsRouter.get("/:boardId/metrics", (c) => {
   const { boardId } = c.req.param();

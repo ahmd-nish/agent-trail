@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import { addNote, contextDir, ensureContextDir } from "../../core/src/context/store.ts";
+import { exportToFile, hydrateFromFile, readStateFile, statePath } from "../../core/src/context/sync.ts";
+import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
 
 const DEFAULT_PORT = Number(process.env["AGENT_TRAIL_PORT"] ?? process.env["PORT"] ?? 3002);
 const BASE_URL_FROM_ENV = process.env["AGENT_TRAIL_URL"] ?? process.env["VIBE_BOARD_URL"];
@@ -61,6 +64,21 @@ switch (cmd) {
     break;
   case "resume":
     await cmdResume(rest[0]);
+    break;
+  case "context":
+    await cmdContext(rest);
+    break;
+  case "sync":
+    await cmdSync(rest);
+    break;
+  case "loop":
+    await cmdLoop(rest);
+    break;
+  case "library":
+    await cmdLibrary(rest);
+    break;
+  case "deploy":
+    await cmdDeploy(rest);
     break;
   default:
     printHelp();
@@ -409,6 +427,12 @@ ${c.dim("Commands:")}
   ${c.bold("start")} <taskId>                  Execute a task and stream live events
   ${c.bold("run")}   --task <id> [--ci]        Headless run — poll for terminal state, print markdown summary
   ${c.bold("resume")} <taskId>                 Resume the task's previous claude session
+  ${c.bold("context")} add "<text>"            Append a team ruling to .agent-trail/context/notes.md
+  ${c.bold("context")} ls                      List markdown files in the team context store
+  ${c.bold("sync")} export|import|status       Export/import the board+task graph to .agent-trail/state.json
+  ${c.bold("loop")} --board <id> [--budget $N] Run the whole board DAG until done / budget / decision ticket
+  ${c.bold("library")} add|new|ls|rm            Manage the team agent library (.agent-trail/library/agents/)
+  ${c.bold("deploy")} --board <id> --target <n> Deploy a board via a configured target (human-gated by default)
   ${c.bold("status")}                          Show all boards and task counts
   ${c.bold("doctor")}                          Preflight checks (claude, git, ports, API key)
 
@@ -592,6 +616,337 @@ async function cmdRun(args: string[]) {
 
   console.log(summary);
   process.exit(passed ? 0 : (terminal.status === "awaiting_human" ? 2 : 1));
+}
+
+// PRD_OPEN_SOURCE 3.2 — team-context store CLI.
+//   agent-trail context add "<text>" [--file conventions]
+//   agent-trail context ls
+// Writes land under <project root>/.agent-trail/context/ so every future
+// execution picks them up via the L0 constitution loader (§3.4).
+async function cmdContext(args: string[]) {
+  const sub = args[0];
+  if (sub === "add") {
+    const positional: string[] = [];
+    let file: string | undefined;
+    for (let i = 1; i < args.length; i++) {
+      const a = args[i]!;
+      if (a === "--file") { file = args[++i]; continue; }
+      positional.push(a);
+    }
+    const text = positional.join(" ").trim();
+    if (!text) {
+      console.error(`Usage: agent-trail context add ${c.bold(`"<text>"`)} [--file <name>]`);
+      process.exit(2);
+    }
+    const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+    const path = addNote(root, { text, file });
+    console.log(`${c.green("✓")} appended to ${c.bold(path)}`);
+    return;
+  }
+  if (sub === "ls" || sub === "list") {
+    const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+    const dir = contextDir(root);
+    ensureContextDir(root);
+    const files = readdirSync(dir).filter((f) => /\.mdx?$/i.test(f)).sort();
+    if (files.length === 0) {
+      console.log(`${c.dim("(empty)")}  ${c.dim(dir)}`);
+      console.log(`  Add your first ruling: ${c.bold(`agent-trail context add "..."`)}`);
+      return;
+    }
+    console.log(`${c.dim(dir)}`);
+    for (const f of files) {
+      const full = join(dir, f);
+      const size = statSync(full).size;
+      const firstLine = readFileSync(full, "utf8").split("\n").find((l) => l.trim()) ?? "";
+      console.log(`  ${c.bold(f)}  ${c.dim(`(${size}B)`)}  ${c.dim(firstLine.slice(0, 60))}`);
+    }
+    return;
+  }
+  console.error(`Usage: agent-trail context ${c.bold("add|ls")} [args]`);
+  process.exit(2);
+}
+
+// PRD_OPEN_SOURCE §5.6 — deploy agent CLI.
+//   agent-trail deploy --board <id> --target <name> [--auto-confirm] [--yes] [--timeout 900]
+// Default: raise a decision ticket, print the deploy id, and poll until the
+// deploy status leaves 'pending' (i.e. the user confirmed elsewhere). --yes
+// answers the ticket immediately from the CLI. --auto-confirm skips the
+// ticket entirely (CI mode; trusted paths only).
+async function cmdDeploy(args: string[]) {
+  const boardId = flagValue(args, "--board");
+  const target  = flagValue(args, "--target");
+  const timeoutSec = Number(flagValue(args, "--timeout") ?? 900);
+  const autoConfirm = args.includes("--auto-confirm");
+  const yes = args.includes("--yes") || autoConfirm;
+  if (!boardId || !target) {
+    console.error(`Usage: agent-trail deploy --board ${c.bold("<id>")} --target ${c.bold("<name>")} [--auto-confirm] [--yes]`);
+    process.exit(2);
+  }
+
+  const kick = await apiFetch(`/api/boards/${boardId}/deploy`, {
+    method: "POST",
+    body: JSON.stringify({ targetName: target, autoConfirm }),
+  });
+  if (!kick.ok) {
+    const err = await kick.text().catch(() => "");
+    console.error(`${c.red("✗")} kick failed: ${err}`);
+    process.exit(1);
+  }
+  const { deployId, ticketId, status: initStatus } = await kick.json() as {
+    deployId: string; ticketId?: string; status: string; requiresConfirmation: boolean;
+  };
+  console.log(`${c.dim("▶")} deploy ${c.dim(deployId.slice(0, 12))} — ${initStatus}`);
+  if (ticketId && !yes) {
+    console.log(`${c.amber("⏸")} awaiting human confirmation (ticket ${ticketId.slice(0, 8)}) — approve in the UI or rerun with --yes`);
+  }
+
+  if (yes && ticketId) {
+    // Auto-approve the ticket by hitting the confirm endpoint directly.
+    const conf = await apiFetch(`/api/deploys/${deployId}/confirm`, { method: "POST" });
+    if (!conf.ok) {
+      const err = await conf.text().catch(() => "");
+      console.error(`${c.red("✗")} confirm failed: ${err}`);
+      process.exit(1);
+    }
+  }
+
+  // Poll for terminal state.
+  const deadline = Date.now() + timeoutSec * 1000;
+  const terminal = new Set(["success", "healthcheck_failed", "command_failed", "rolled_back", "timed_out"]);
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const cur = await apiFetch(`/api/deploys/${deployId}`);
+    if (!cur.ok) continue;
+    const row = await cur.json() as { status: string; command_output?: string; healthcheck_status?: string | null; rollback_output?: string | null };
+    if (terminal.has(row.status)) {
+      const icon = row.status === "success" ? c.green("✓") : c.red("✗");
+      console.log(`${icon} deploy ${row.status}`);
+      if (row.healthcheck_status) console.log(`  ${c.dim("healthcheck:")} ${row.healthcheck_status}`);
+      if (row.command_output)     console.log(`  ${c.dim("output:")} ${row.command_output.split("\n").slice(-4).join("\n  ")}`);
+      if (row.rollback_output)    console.log(`  ${c.dim("rollback:")} ${row.rollback_output.split("\n").slice(-4).join("\n  ")}`);
+      process.exit(row.status === "success" ? 0 : 1);
+    }
+  }
+  console.error(`${c.red("✗")} timed out after ${timeoutSec}s`);
+  process.exit(124);
+}
+
+// PRD_OPEN_SOURCE §4.1/§4.2 — team library CLI.
+//   agent-trail library add <url> [--overwrite]
+//   agent-trail library new <name> [--description "..."]
+//   agent-trail library ls
+//   agent-trail library rm <name>
+async function cmdLibrary(args: string[]) {
+  const sub = args[0];
+  const { addNote: _n } = await import("../../core/src/context/store.ts"); void _n; // side-effect-free import (kept for future use)
+  const {
+    listAgents, readAgent, saveAgent, deleteAgent, scaffoldAgent, importAgentFromUrl,
+  } = await import("../../core/src/library/store.ts");
+  const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+
+  if (sub === "add") {
+    const positional = args.slice(1).filter((a) => !a.startsWith("--"));
+    const url = positional[0];
+    const overwrite = args.includes("--overwrite");
+    if (!url) {
+      console.error(`Usage: agent-trail library add ${c.bold("<url>")} [--overwrite]`);
+      process.exit(2);
+    }
+    const r = await importAgentFromUrl(root, url, { overwrite });
+    if (!r.ok) { console.error(`${c.red("✗")} ${r.error}`); process.exit(1); }
+    console.log(`${c.green("✓")} imported ${c.bold(r.entry.name)} → ${c.dim(r.entry.path)}`);
+    return;
+  }
+
+  if (sub === "new") {
+    const positional = args.slice(1).filter((a) => !a.startsWith("--"));
+    const name = positional[0];
+    const description = flagValue(args, "--description");
+    if (!name) {
+      console.error(`Usage: agent-trail library new ${c.bold("<name>")} [--description "..."]`);
+      process.exit(2);
+    }
+    const scaff = scaffoldAgent(name, description ?? "TODO: describe what this agent is good at");
+    const saved = saveAgent(root, scaff, { overwrite: args.includes("--overwrite") });
+    if (!saved.ok) { console.error(`${c.red("✗")} ${saved.error}`); process.exit(1); }
+    console.log(`${c.green("✓")} scaffold at ${c.bold(saved.path)}`);
+    console.log(`  Edit the file and fill in the frontmatter + body.`);
+    return;
+  }
+
+  if (sub === "ls" || sub === "list") {
+    const entries = listAgents(root);
+    if (entries.length === 0) {
+      console.log(`${c.dim("(empty)")}  Add one: ${c.bold("agent-trail library add <url>")}  or  ${c.bold("agent-trail library new <name>")}`);
+      return;
+    }
+    for (const e of entries) {
+      console.log(`  ${c.bold(e.name.padEnd(24))} ${c.dim(e.description.slice(0, 60))}`);
+    }
+    return;
+  }
+
+  if (sub === "rm" || sub === "remove") {
+    const name = args[1];
+    if (!name) {
+      console.error(`Usage: agent-trail library rm ${c.bold("<name>")}`);
+      process.exit(2);
+    }
+    if (!readAgent(root, name)) {
+      console.error(`${c.red("✗")} agent "${name}" not found`);
+      process.exit(1);
+    }
+    deleteAgent(root, name);
+    console.log(`${c.green("✓")} removed ${c.bold(name)}`);
+    return;
+  }
+
+  console.error(`Usage: agent-trail library ${c.bold("add|new|ls|rm")} [args]`);
+  process.exit(2);
+}
+
+// PRD_OPEN_SOURCE §5.4 — Board loop CLI. "Ralph the backlog" —
+//   agent-trail loop --board <id> [--budget $2.50] [--timeout 3600]
+// Kicks off /run, then polls tasks + cost every 3s and stops on:
+//   • every task in a terminal status (done / in_review / blocked / failed)
+//   • a decision ticket appearing (human input needed — this is the whole point)
+//   • budget threshold crossed
+//   • overall timeout
+async function cmdLoop(args: string[]) {
+  const boardId = flagValue(args, "--board");
+  const budgetUsd = Number(flagValue(args, "--budget") ?? 0);
+  const timeoutSec = Number(flagValue(args, "--timeout") ?? 3600);
+  if (!boardId) {
+    console.error(`Usage: agent-trail loop --board ${c.bold("<boardId>")} [--budget <usd>] [--timeout <sec>]`);
+    process.exit(2);
+  }
+
+  const runRes = await apiFetch(`/api/boards/${boardId}/run`, { method: "POST" });
+  if (!runRes.ok) {
+    const err = await runRes.text().catch(() => "");
+    console.error(`${c.red("✗")} could not start board loop: ${err}`);
+    process.exit(1);
+  }
+  console.log(`${c.dim("▶")} board loop started ${c.dim(`(${boardId.slice(0, 8)})`)}`);
+  if (budgetUsd > 0) console.log(`${c.dim("  budget:")} $${budgetUsd.toFixed(2)}`);
+
+  const deadline = Date.now() + timeoutSec * 1000;
+  let lastLoggedStatus = "";
+  const terminal = new Set(["done", "in_review", "blocked", "failed"]);
+
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+
+    const tasks = await (await apiFetch(`/api/boards/${boardId}/tasks`)).json() as Array<{
+      id: string; title: string; status: string; lastError: string | null;
+    }>;
+    const counts: Record<string, number> = {};
+    for (const t of tasks) counts[t.status] = (counts[t.status] ?? 0) + 1;
+    const summary = Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(" ");
+    if (summary !== lastLoggedStatus) {
+      console.log(`  ${c.dim("·")} ${summary}`);
+      lastLoggedStatus = summary;
+    }
+
+    // Watch for a decision ticket on any task — the entire point of the loop
+    // is to hand control back to the human at these gates.
+    let openTickets = 0;
+    for (const t of tasks) {
+      try {
+        const tickets = await (await apiFetch(`/api/tasks/${t.id}/decisions`)).json() as Array<{ answer: string | null }>;
+        openTickets += tickets.filter((tk) => tk.answer === null).length;
+      } catch { /* ignore per-task poll errors */ }
+    }
+    if (openTickets > 0) {
+      console.log(`${c.amber("⏸")} ${openTickets} open decision ticket(s) — loop paused for human input.`);
+      printBoardSummary(tasks);
+      process.exit(2);
+    }
+
+    // Budget check.
+    if (budgetUsd > 0) {
+      const cost = await (await apiFetch(`/api/boards/${boardId}/cost`)).json() as {
+        totals: { usd: number };
+      };
+      if (cost.totals.usd >= budgetUsd) {
+        console.log(`${c.red("✗")} budget exceeded — $${cost.totals.usd.toFixed(4)} ≥ $${budgetUsd.toFixed(2)}`);
+        printBoardSummary(tasks);
+        process.exit(3);
+      }
+    }
+
+    // Terminal? Every task in a terminal state = loop done.
+    if (tasks.every((t) => terminal.has(t.status))) {
+      console.log(`${c.green("✓")} board loop finished — every task is in a terminal state.`);
+      printBoardSummary(tasks);
+      const anyFailed = tasks.some((t) => t.status === "failed" || t.status === "blocked");
+      process.exit(anyFailed ? 1 : 0);
+    }
+  }
+
+  console.error(`${c.red("✗")} timed out after ${timeoutSec}s`);
+  process.exit(124);
+}
+
+function printBoardSummary(tasks: Array<{ id: string; title: string; status: string; lastError: string | null }>): void {
+  console.log("");
+  for (const t of tasks) {
+    const icon = statusIcon(t.status);
+    console.log(`  ${icon} ${t.title} ${c.dim(t.id.slice(0, 8))}${t.lastError ? ` ${c.red("— " + t.lastError.split("\n")[0]!.slice(0, 60))}` : ""}`);
+  }
+}
+
+// PRD_OPEN_SOURCE 3.1 — export/import the board+task graph as .agent-trail/state.json.
+async function cmdSync(args: string[]) {
+  const sub = args[0];
+  const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+  if (sub === "export") {
+    const { Database } = await import("bun:sqlite");
+    const db = new Database(resolveDbPath(root));
+    try {
+      const path = exportToFile(db, root);
+      console.log(`${c.green("✓")} exported to ${c.bold(path)}`);
+    } finally {
+      db.close();
+    }
+    return;
+  }
+  if (sub === "import") {
+    const { Database } = await import("bun:sqlite");
+    const db = new Database(resolveDbPath(root));
+    try {
+      const res = hydrateFromFile(db, root);
+      if (!res) {
+        console.error(`${c.red("✗")} no state.json at ${c.bold(statePath(root))}`);
+        process.exit(1);
+      }
+      if (res.skippedVersion) {
+        console.error(`${c.red("✗")} state.json schema version unknown — nothing imported`);
+        process.exit(1);
+      }
+      console.log(`${c.green("✓")} imported ${res.boardsUpserted} board(s), ${res.tasksUpserted} task(s)`);
+    } finally {
+      db.close();
+    }
+    return;
+  }
+  if (sub === "status") {
+    const path = statePath(root);
+    const state = readStateFile(root);
+    if (!state) {
+      console.log(`${c.dim("(no state.json)")}  ${c.dim(path)}`);
+      console.log(`  ${c.bold("agent-trail sync export")} to seed it.`);
+      return;
+    }
+    console.log(`${c.bold(path)}`);
+    console.log(`  version:   ${state.version}`);
+    console.log(`  exported:  ${state.exported_at}`);
+    console.log(`  boards:    ${state.boards.length}`);
+    console.log(`  tasks:     ${state.tasks.length}`);
+    return;
+  }
+  console.error(`Usage: agent-trail sync ${c.bold("export|import|status")}`);
+  process.exit(2);
 }
 
 // PRD_OPEN_SOURCE 2.2 — resume a task's previous claude session.

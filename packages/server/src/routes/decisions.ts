@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { getDb } from "../db.ts";
 import { executionManager } from "../execution-manager.ts";
+import { appendDecision } from "../../../core/src/context/store.ts";
+import { resolveProjectRoot } from "../../../core/src/storage/paths.ts";
 
 export const decisionsRouter = new Hono();
 
@@ -43,6 +45,25 @@ decisionsRouter.post("/decisions/:ticketId/answer", async (c) => {
   db.query(
     "UPDATE decision_tickets SET answer = ?, answered_at = ? WHERE id = ?",
   ).run(answer.trim(), now, ticketId);
+
+  // PRD 3.3 — every ask_human answer auto-appends to context/decisions.md.
+  // This is the team's durable ruling: any future agent execution that loads
+  // the L0 constitution (PRD 3.4) will inherit it. Best-effort — never block
+  // the resume on a filesystem hiccup.
+  const taskRow = db
+    .query("SELECT title FROM tasks WHERE id = ?")
+    .get(ticket.task_id) as { title: string } | null;
+  try {
+    appendDecision(resolveProjectRoot(), {
+      taskTitle: taskRow?.title ?? "unknown task",
+      question: ticket.question,
+      answer: answer.trim(),
+    });
+  } catch (err) {
+    console.warn(
+      `[decisions] failed to append decisions.md: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
   // Resume the task
   const result = await executionManager.resume(ticket.task_id, ticket.question, answer.trim());

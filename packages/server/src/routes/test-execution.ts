@@ -4,6 +4,7 @@ import type { TestCase } from "../../../core/src/types/index.ts";
 import { executeCase } from "../testing/executor.ts";
 import { validateCases } from "../testing/validate-cases.ts";
 import { generateCasesWithAgent, makeClaudeCaseGenRunner } from "../testing/generate-cases.ts";
+import { computeCoverage } from "../testing/coverage.ts";
 
 // PRD_TESTING T1 — Test Execution Service routes.
 //   POST /api/tests/:caseId/execute             — evidence-grade single run
@@ -92,6 +93,18 @@ testExecutionRouter.post("/tests/:caseId/execute", async (c) => {
 // PRD_TESTING T4.3 — validate a task's testCases against the board env at
 // save time. Returns the list of unknown-env-key placeholders so the UI can
 // warn early (not at run time).
+// PRD_OPEN_SOURCE §B — coverage taxonomy audit. Returns per-criterion
+// happy/negative/edge counts + "meets bar" flag so the UI can highlight
+// under-covered success criteria (and CI can fail the plan-review if strict).
+testExecutionRouter.get("/tests/:taskId/coverage", (c) => {
+  const { taskId } = c.req.param();
+  const db = getDb();
+  const taskRow = db.query("SELECT * FROM tasks WHERE id = ?").get(taskId) as Parameters<typeof rowToTask>[0] | null;
+  if (!taskRow) return c.json({ error: "task not found" }, 404);
+  const task = rowToTask(taskRow);
+  return c.json(computeCoverage(task.id, task.title, task.successCriteria, task.testCases));
+});
+
 testExecutionRouter.get("/tests/:taskId/validate", (c) => {
   const { taskId } = c.req.param();
   const db = getDb();

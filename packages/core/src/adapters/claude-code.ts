@@ -1,44 +1,15 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { Task, TddPhase, PermissionMode } from "../types/index.ts";
+import type { Task, PermissionMode } from "../types/index.ts";
 import type { StreamEvent, StreamResultEvent } from "../types/stream-json.ts";
 import { resolveModel } from "../planner/models.ts";
 import { registerAdapter } from "./agent-adapter.ts";
+import { buildSystemPrompt } from "./system-prompt.ts";
 
 export interface AdapterCallbacks {
   onEvent(raw: string, parsed: StreamEvent): void;
   onComplete(result: StreamResultEvent): void;
   onError(err: Error): void;
-}
-
-const PHASE_INSTRUCTIONS: Record<TddPhase, string> = {
-  write_tests: `PHASE: write_tests
-Your ONLY job is to write failing tests that define the expected behaviour of this task.
-Do NOT implement any production code yet — tests should fail because the implementation does not exist.
-Use the project's existing test framework (bun:test if available).`,
-
-  implement: `PHASE: implement
-Tests have already been written. Write the minimum production code needed to make them pass.
-Do NOT modify existing tests. Run tests after implementing to confirm they pass.`,
-
-  verify_tests: `PHASE: verify_tests
-Run the test suite and report results. Do NOT modify any code.
-Return exit code 0 only if all tests pass.`,
-
-  implement_only: `PHASE: implement_only
-No TDD gate — implement the full solution as described.`,
-};
-
-function buildSystemPrompt(task: Task): string {
-  const parts = [
-    "You are Claude Code executing a task inside an agent-trail pipeline.",
-    "",
-    PHASE_INSTRUCTIONS[task.tddPhase],
-  ];
-  if (task.skills.length > 0) {
-    parts.push(`\nSuggested skills: ${task.skills.join(", ")}`);
-  }
-  return parts.join("\n");
 }
 
 function buildUserPrompt(task: Task): string {
@@ -76,10 +47,13 @@ export interface SpawnOpts {
    *  continue a prior session (kept alive by the CLI's own store) rather than
    *  starting a fresh one. Falls back to a fresh run if the CLI refuses the id. */
   resumeSessionId?: string;
+  /** PRD_OPEN_SOURCE 3.4 — the L0 team constitution (CLAUDE.md + context files),
+   *  loaded and capped by the caller so this adapter stays filesystem-free. */
+  constitution?: string;
   callbacks: AdapterCallbacks;
 }
 
-export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionMode, timeoutMs, resumeSessionId, callbacks }: SpawnOpts): ChildProcess | null {
+export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionMode, timeoutMs, resumeSessionId, constitution, callbacks }: SpawnOpts): ChildProcess | null {
   // Test-only escape hatch: when AGENT_TRAIL_CLAUDE_MOCK is set to a JSON
   // scenario, skip spawning a real subprocess and drive the callbacks with
   // scripted events. Lets server-level E2E tests exercise the full pipeline
@@ -88,7 +62,10 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
   const mock = process.env["AGENT_TRAIL_CLAUDE_MOCK"];
   if (mock) {
     void worktreePath; void mcpConfigPath; void permissionMode; void timeoutMs;
-    runMockAdapter(task, mock, callbacks);
+    // Pre-compute the system prompt so the mock can optionally echo it — the
+    // only way an E2E test can prove the constitution reached the adapter.
+    const systemPrompt = buildSystemPrompt(task, constitution);
+    runMockAdapter(task, mock, callbacks, systemPrompt);
     return null;
   }
 
@@ -113,7 +90,7 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
         "--verbose",
         "--resume", resumeSessionId,
         "--permission-mode", permissionMode,
-        "--append-system-prompt", buildSystemPrompt(task),
+        "--append-system-prompt", buildSystemPrompt(task, constitution),
       ]
     : [
         "-p",
@@ -122,7 +99,7 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
         "--verbose",
         "--no-session-persistence",
         "--permission-mode", permissionMode,
-        "--append-system-prompt", buildSystemPrompt(task),
+        "--append-system-prompt", buildSystemPrompt(task, constitution),
       ];
 
   const resolvedModel = resolveModel(task.model, task.modelTier);
@@ -234,9 +211,12 @@ interface MockScenario {
   outputTokens?: number;
   durationMs?: number;
   delayMs?: number;
+  /** When true, prepend an assistant text event echoing the system prompt.
+   *  Used by PRD 3.4 E2E to verify the constitution reached the adapter. */
+  echoSystemPrompt?: boolean;
 }
 
-function runMockAdapter(task: Task, mock: string, callbacks: AdapterCallbacks): void {
+function runMockAdapter(task: Task, mock: string, callbacks: AdapterCallbacks, systemPrompt = ""): void {
   let scenario: MockScenario;
   try {
     scenario = JSON.parse(mock) as MockScenario;
@@ -245,7 +225,18 @@ function runMockAdapter(task: Task, mock: string, callbacks: AdapterCallbacks): 
     return;
   }
 
-  const events = scenario.events ?? [];
+  const scenarioEvents = scenario.events ?? [];
+  const events: StreamEvent[] = scenario.echoSystemPrompt
+    ? [
+        {
+          type: "assistant",
+          message: {
+            content: [{ type: "text", text: `SYSTEM_PROMPT_ECHO:\n${systemPrompt}` }],
+          },
+        } as StreamEvent,
+        ...scenarioEvents,
+      ]
+    : scenarioEvents;
   const delay = Math.max(0, scenario.delayMs ?? 0);
 
   async function drive() {

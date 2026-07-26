@@ -24,6 +24,26 @@ export function resolveModel(
 }
 
 /**
+ * PRD 4.5 — Model router v2: one-tier escalation ladder.
+ *
+ * Called after 2 failed verify_tests loops. Untrained default (null) counts
+ * as `sonnet` — the planner's fallback tier — so escalation lands on `opus`.
+ * `opus` stays at `opus` (top of the ladder); the caller then hands off to a
+ * human decision instead of burning more budget.
+ *
+ * Returns null when no further escalation is possible (already at opus).
+ */
+export function nextTier(current: ModelTier | null | undefined): ModelTier | null {
+  const from = current ?? "sonnet";
+  const ladder: Record<ModelTier, ModelTier | null> = {
+    haiku:  "sonnet",
+    sonnet: "opus",
+    opus:   null,
+  };
+  return ladder[from];
+}
+
+/**
  * Planner heuristic — pick a starting tier from a task's shape. Runs on the
  * raw task the planner emitted, so signals available: title, description,
  * tddEnabled, reviewKind, priority, component. Deliberately conservative —

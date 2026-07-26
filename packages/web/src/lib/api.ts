@@ -64,6 +64,9 @@ export const api = {
       ),
     plan: (opts: { prdText: string; name?: string; boardId?: string; dryRun?: boolean }) =>
       req<PlanResult>("/api/boards/plan", { method: "POST", body: JSON.stringify(opts) }),
+    // §C plan-review approval gate.
+    approve: (boardId: string) =>
+      req<Board>(`/api/boards/${boardId}/approve`, { method: "POST" }),
     // Phase 3b: encrypted env vars for test-case substitution
     listEnv: (boardId: string, reveal = false) =>
       req<{ entries: BoardEnvEntry[]; revealed: boolean }>(
@@ -145,6 +148,23 @@ export const api = {
     list: () => req<AgentEntry[]>("/api/agents"),
     get: (name: string) => req<AgentEntry & { body: string }>(`/api/agents/${encodeURIComponent(name)}`),
   },
+  ideas: {
+    start: (idea: string) =>
+      req<IdeaState>("/api/ideas/start", { method: "POST", body: JSON.stringify({ idea }) }),
+    get: (id: string) => req<IdeaState>(`/api/ideas/${id}`),
+    answer: (id: string, key: string, value: string | string[], note?: string) =>
+      req<IdeaState>(`/api/ideas/${id}/answer`, {
+        method: "POST",
+        body: JSON.stringify({ key, value, ...(note ? { note } : {}) }),
+      }),
+    synthesizePrd: (id: string) =>
+      req<IdeaState>(`/api/ideas/${id}/synthesize-prd`, { method: "POST" }),
+    linkBoard: (id: string, boardId: string) =>
+      req<IdeaState>(`/api/ideas/${id}/link-board`, {
+        method: "POST",
+        body: JSON.stringify({ boardId }),
+      }),
+  },
   dev: {
     status: (boardId: string) => req<DevServerStatus>(`/api/boards/${boardId}/dev/status`),
     detect: (boardId: string) => req<{ command: string | null; port: number | null }>(`/api/boards/${boardId}/dev/detect`),
@@ -178,6 +198,39 @@ export interface DevLogLine {
   ts: number;
   stream: "stdout" | "stderr";
   text: string;
+}
+
+export interface WizardOption {
+  label: string;
+  description?: string;
+  pros: string[];
+  cons: string[];
+}
+
+export interface WizardQuestion {
+  key: string;
+  question: string;
+  description?: string;
+  options: WizardOption[];
+  multiSelect?: boolean;
+  recommendedLabel?: string;
+}
+
+export interface WizardAnswer {
+  value: string | string[];
+  note?: string;
+}
+
+export interface IdeaState {
+  id: string;
+  boardId: string | null;
+  ideaText: string;
+  questions: WizardQuestion[];
+  answers: Record<string, WizardAnswer>;
+  synthesizedPrd: string | null;
+  status: "gathering" | "ready" | "done" | "error";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ExampleFile {

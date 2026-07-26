@@ -11,6 +11,7 @@ import { EmptyBoardState } from "./components/EmptyBoardState.tsx";
 import { DagView } from "./components/DagView.tsx";
 import { BoardSettings } from "./components/BoardSettings.tsx";
 import { DevServerPill } from "./components/DevServerPill.tsx";
+import { PlanReviewBanner } from "./components/PlanReviewBanner.tsx";
 import { SettingsPopover } from "./components/SettingsPopover.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ToastProvider } from "./components/Toast.tsx";
@@ -89,6 +90,10 @@ export function App() {
         autoCommit: false,
         autoPr: false,
         commitStyle: "conventional",
+        // §C — demo board is pre-approved so ?demo=1 doesn't gate on human
+        // review. Real planner-created boards land with approvedAt=null (see
+        // the other constructor below).
+        approvedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -322,6 +327,10 @@ export function App() {
         autoCommit: false,
         autoPr: false,
         commitStyle: "conventional",
+        // §C — actual value comes from the server on the next boards.list()
+        // refresh; the initial guess picks the safer "pending" state so the
+        // review banner appears immediately after a plan.
+        approvedAt: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -513,6 +522,15 @@ export function App() {
 
       {/* Main */}
       <main className="flex-1 overflow-hidden p-4">
+        {activeBoard && !activeBoard.approvedAt && (
+          <PlanReviewBanner
+            board={activeBoard}
+            tasks={tasks}
+            onApproved={(b) =>
+              setBoards((bs) => bs.map((x) => (x.id === b.id ? { ...x, approvedAt: b.approvedAt } : x)))
+            }
+          />
+        )}
         {!activeBoardId ? (
           <EmptyBoardState
             onPlanned={handlePlanResult}

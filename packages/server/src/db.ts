@@ -245,6 +245,149 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
       }
     },
   },
+  {
+    version: 15,
+    description: "Phase-4: tasks.failed_verify_count — router-v2 escalation on repeated verify_tests failures",
+    up: (db) => {
+      // §4.5 model router v2 — auto-escalate the tier once a task has failed
+      // verify_tests twice in a row. Counter resets to 0 on successful verify
+      // or on tier escalation itself.
+      if (!columnExists(db, "tasks", "failed_verify_count")) {
+        db.exec("ALTER TABLE tasks ADD COLUMN failed_verify_count INTEGER NOT NULL DEFAULT 0");
+      }
+    },
+  },
+  {
+    version: 16,
+    description: "Idea wizard — ideas table for the guided idea→PRD flow",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ideas (
+          id TEXT PRIMARY KEY,
+          board_id TEXT,
+          idea_text TEXT NOT NULL,
+          questions TEXT NOT NULL DEFAULT '[]',
+          answers TEXT NOT NULL DEFAULT '{}',
+          synthesized_prd TEXT,
+          status TEXT NOT NULL DEFAULT 'gathering',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE SET NULL
+        )
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status, created_at DESC)");
+    },
+  },
+  {
+    version: 17,
+    description: "Plan-review gate — boards.approved_at (nullable = pending human approval)",
+    up: (db) => {
+      // §C plan-approval gate. Manually-created boards get an approved_at
+      // set to created_at (existing behaviour — user knows what they're doing).
+      // Planner-created boards leave it null so execution is blocked until the
+      // user reviews the plan and hits "Approve & Start Building".
+      if (!columnExists(db, "boards", "approved_at")) {
+        db.exec("ALTER TABLE boards ADD COLUMN approved_at TEXT");
+        // Backfill existing boards — they've been running fine without a gate,
+        // and we don't want the upgrade to freeze them.
+        db.query("UPDATE boards SET approved_at = COALESCE(approved_at, created_at)").run();
+      }
+    },
+  },
+  {
+    version: 18,
+    description: "§5.1 loop policy — tasks.loop_policy (nullable JSON = use tddEnabled defaults)",
+    up: (db) => {
+      if (!columnExists(db, "tasks", "loop_policy")) {
+        db.exec("ALTER TABLE tasks ADD COLUMN loop_policy TEXT");
+      }
+    },
+  },
+  {
+    version: 19,
+    description: "§4.4b steering queue — pending steers merged into L1 at next spawn",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS steering (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'note',
+          text TEXT NOT NULL,
+          consumed_at TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_steering_pending ON steering(task_id, consumed_at, created_at)");
+    },
+  },
+  {
+    version: 20,
+    description: "§4.7 file-footprint parallelism — tasks.likely_paths JSON array",
+    up: (db) => {
+      if (!columnExists(db, "tasks", "likely_paths")) {
+        db.exec("ALTER TABLE tasks ADD COLUMN likely_paths TEXT NOT NULL DEFAULT '[]'");
+      }
+    },
+  },
+  {
+    version: 21,
+    description: "§5.2 Ralph iteration memory — per-iteration compact retry summaries",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS iteration_memories (
+          id           TEXT PRIMARY KEY,
+          task_id      TEXT NOT NULL,
+          iteration    INTEGER NOT NULL,
+          summary      TEXT NOT NULL,
+          test_output_tail TEXT,
+          git_diff_head    TEXT,
+          created_at   TEXT NOT NULL,
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_iteration_memories_task ON iteration_memories(task_id, iteration DESC)");
+    },
+  },
+  {
+    version: 22,
+    description: "§5.6 deploy agent — deploy_targets + deploys tables (human-gated executions)",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS deploy_targets (
+          id             TEXT PRIMARY KEY,
+          board_id       TEXT NOT NULL,
+          name           TEXT NOT NULL,
+          kind           TEXT NOT NULL DEFAULT 'shell',
+          command        TEXT NOT NULL,
+          healthcheck_url TEXT,
+          rollback_command TEXT,
+          working_dir    TEXT,
+          created_at     TEXT NOT NULL,
+          updated_at     TEXT NOT NULL,
+          UNIQUE (board_id, name),
+          FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS deploys (
+          id               TEXT PRIMARY KEY,
+          board_id         TEXT NOT NULL,
+          target_id        TEXT NOT NULL,
+          decision_ticket_id TEXT,
+          status           TEXT NOT NULL DEFAULT 'pending',
+          command_output   TEXT,
+          healthcheck_status TEXT,
+          rollback_output  TEXT,
+          started_at       TEXT NOT NULL,
+          finished_at      TEXT,
+          FOREIGN KEY (board_id)  REFERENCES boards(id)          ON DELETE CASCADE,
+          FOREIGN KEY (target_id) REFERENCES deploy_targets(id)  ON DELETE CASCADE
+        )
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_deploys_board ON deploys(board_id, started_at DESC)");
+    },
+  },
 ];
 
 function columnExists(db: Database, table: string, column: string): boolean {
@@ -369,6 +512,7 @@ type BoardRow = {
   auto_commit: number | null;
   auto_pr: number | null;
   commit_style: string | null;
+  approved_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -403,9 +547,18 @@ type TaskRow = {
   component: string | null;
   external_dependencies: string | null;
   test_cases: string | null;
+  loop_policy: string | null;
+  likely_paths: string | null;
+  failed_verify_count: number | null;
   created_at: string;
   updated_at: string;
 };
+
+// Safe JSON parse for optional-JSON columns (loop_policy, etc.). Returns null
+// on any parse error so a corrupt row can't crash the row mapper.
+function safeJsonParse(raw: string): unknown {
+  try { return JSON.parse(raw); } catch { return null; }
+}
 
 export function rowToBoard(row: BoardRow): Board {
   return {
@@ -426,6 +579,7 @@ export function rowToBoard(row: BoardRow): Board {
     autoCommit: Boolean(row.auto_commit ?? 0),
     autoPr:     Boolean(row.auto_pr ?? 0),
     commitStyle: row.commit_style ?? "conventional",
+    approvedAt: row.approved_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -462,6 +616,8 @@ export function rowToTask(row: TaskRow): Task {
     component: row.component ?? null,
     externalDependencies: JSON.parse(row.external_dependencies ?? "[]") as string[],
     testCases: JSON.parse(row.test_cases ?? "[]") as TestCase[],
+    loopPolicy: row.loop_policy ? safeJsonParse(row.loop_policy) : null,
+    likelyPaths: JSON.parse(row.likely_paths ?? "[]") as string[],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

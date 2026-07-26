@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { MODEL_FOR_TIER, resolveModel, suggestTier } from "./models.ts";
+import { MODEL_FOR_TIER, resolveModel, suggestTier, nextTier } from "./models.ts";
 
 describe("MODEL_FOR_TIER", () => {
   test("has an entry for every tier", () => {
@@ -96,5 +96,24 @@ describe("suggestTier", () => {
 
   test("empty task hints → sonnet (safe default)", () => {
     expect(suggestTier({})).toBe("sonnet");
+  });
+});
+
+describe("nextTier — PRD 4.5 escalation ladder", () => {
+  test("haiku → sonnet", () => {
+    expect(nextTier("haiku")).toBe("sonnet");
+  });
+
+  test("sonnet → opus", () => {
+    expect(nextTier("sonnet")).toBe("opus");
+  });
+
+  test("opus → null (top of the ladder — hand to a human)", () => {
+    expect(nextTier("opus")).toBeNull();
+  });
+
+  test("null/undefined tier treated as sonnet (planner default) → opus", () => {
+    expect(nextTier(null)).toBe("opus");
+    expect(nextTier(undefined)).toBe("opus");
   });
 });

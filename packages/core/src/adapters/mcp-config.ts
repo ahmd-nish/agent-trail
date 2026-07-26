@@ -53,6 +53,8 @@ export class McpConfigManager {
         AGENT_TRAIL_DB_PATH: askHuman.dbPath,
         AGENT_TRAIL_TASK_ID: askHuman.taskId,
         AGENT_TRAIL_EXECUTION_ID: askHuman.executionId,
+        // §4.4 — repo/context root so the MCP tools can read memories.
+        AGENT_TRAIL_ROOT: this.repoRoot,
         VIBE_BOARD_DB_PATH: askHuman.dbPath,
         VIBE_BOARD_TASK_ID: askHuman.taskId,
         VIBE_BOARD_EXECUTION_ID: askHuman.executionId,

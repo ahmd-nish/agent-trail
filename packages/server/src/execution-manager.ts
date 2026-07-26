@@ -14,6 +14,14 @@ import type { PermissionMode, TddPhase } from "../../core/src/types/index.ts";
 import { DEFAULT_PERMISSION_MODE } from "../../core/src/types/index.ts";
 import type { StreamEvent } from "../../core/src/types/stream-json.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
+import { loadConstitution } from "../../core/src/context/store.ts";
+import { buildHeuristicMemory, buildL1Pack, writeTaskMemory } from "../../core/src/context/memory.ts";
+import { rankRelevantFiles } from "../../core/src/context/repo-map.ts";
+import { detectThrash, type ExecutionSample } from "../../core/src/loop/thrash.ts";
+import { resolveLoopPolicy, type PartialLoopPolicy } from "../../core/src/loop/policy.ts";
+import { buildIterationMemory, renderIterationHistory, type IterationSample } from "../../core/src/loop/iteration.ts";
+import { nextTier } from "../../core/src/planner/models.ts";
+import type { ModelTier } from "../../core/src/types/index.ts";
 
 const MAX_CONCURRENT = 3;
 // User-owned data (DB, worktrees, MCP configs) lives at the project root
@@ -195,6 +203,56 @@ class ExecutionManager {
     return { scheduledCount: count };
   }
 
+  // PRD 4.4 (§D slice) — persist a heuristic task memory after a successful
+  // terminal execution. Downstream DAG tasks pick this up via buildL1Pack
+  // (see the L0+L1 concat above). Best-effort — filesystem hiccups log a
+  // warning but never fail the run that just succeeded.
+  private _persistTaskMemory(taskId: string, completedAt: string): void {
+    try {
+      const db = getDb();
+      const task = db
+        .query("SELECT id, title, description, success_criteria FROM tasks WHERE id = ?")
+        .get(taskId) as { id: string; title: string; description: string; success_criteria: string | null } | null;
+      if (!task) return;
+      const criteria = JSON.parse(task.success_criteria ?? "[]") as string[];
+
+      // Grab the most recent git_diff + file_list artifacts.
+      const gitDiff = (db
+        .query("SELECT content FROM artifacts WHERE task_id = ? AND kind = 'git_diff' ORDER BY created_at DESC LIMIT 1")
+        .get(taskId) as { content: string } | null)?.content;
+      const fileListRaw = (db
+        .query("SELECT content FROM artifacts WHERE task_id = ? AND kind = 'file_list' ORDER BY created_at DESC LIMIT 1")
+        .get(taskId) as { content: string } | null)?.content;
+      // file_list artifact is `git status --porcelain` output — one file per line, prefixed by status.
+      const fileList = (fileListRaw ?? "")
+        .split("\n")
+        .map((l) => l.replace(/^\s*[A-Z?!]{1,2}\s+/, "").trim())
+        .filter(Boolean);
+
+      // Decision keys for this task = distinct question labels from tickets.
+      const decisionRows = db
+        .query("SELECT question FROM decision_tickets WHERE task_id = ?")
+        .all(taskId) as { question: string }[];
+      const decisionKeys = [...new Set(decisionRows.map((r) => r.question.slice(0, 60)))];
+
+      const memory = buildHeuristicMemory({
+        task: {
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          successCriteria: criteria,
+        },
+        gitDiff,
+        fileList,
+        decisionKeys,
+        completedAt,
+      });
+      writeTaskMemory(REPO_ROOT, memory);
+    } catch (err) {
+      console.warn(`[task-memory] failed to persist memory for ${taskId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private async _awaitTask(taskId: string): Promise<string> {
     const db = getDb();
     const row = db.query("SELECT status FROM tasks WHERE id = ?").get(taskId) as { status: string } | null;
@@ -226,12 +284,22 @@ class ExecutionManager {
           continue;
         }
 
-        // Find the next runnable task (dependencies all complete)
-        const next = tasks.find(
-          (t) =>
-            (t.status === "backlog" || t.status === "ready") &&
-            t.dependsOn.every((dep) => doneIds.has(dep)),
+        // Find the next runnable task (dependencies all complete). §4.7 —
+        // if the candidate's likelyPaths overlap with any currently-active
+        // task's footprint, defer it and try the next-ready one; prevents
+        // worktree conflicts on the day the loop learns to parallelise.
+        // Import here to avoid a top-level cycle risk.
+        const { hasOverlap } = await import("../../core/src/loop/footprint.ts");
+        const activePaths = tasks
+          .filter((t) => this.active.has(t.id))
+          .map((t) => t.likelyPaths ?? []);
+        const runnable = tasks.filter(
+          (t) => (t.status === "backlog" || t.status === "ready") &&
+                 t.dependsOn.every((dep) => doneIds.has(dep)),
         );
+        const next = runnable.find(
+          (t) => !activePaths.some((paths) => hasOverlap(t.likelyPaths ?? [], paths)),
+        ) ?? runnable[0];
 
         if (!next) break; // nothing left to run — done or permanently blocked
 
@@ -495,18 +563,175 @@ class ExecutionManager {
           "INSERT INTO artifacts (id, task_id, execution_id, kind, content, created_at) VALUES (?, ?, ?, 'test_output', ?, ?)",
         ).run(crypto.randomUUID(), taskId, executionId, result.output, finishedAt);
 
-        const nextStatus = result.passed ? "in_review" : "blocked";
-        const lastError = result.passed ? null : `Tests failed (exit ${result.exitCode})`;
-        db.query(
-          "UPDATE tasks SET status = ?, active_form = NULL, last_error = ?, updated_at = ? WHERE id = ?",
-        ).run(nextStatus, lastError, finishedAt, taskId);
-
         this.broadcast(taskId, {
           type: "test_result",
           passed: result.passed,
           exitCode: result.exitCode,
           output: result.output.slice(0, 500),
         });
+
+        // ─── §5.2 Ralph iteration memory ────────────────────────────────
+        // On EVERY verify_tests failure — write a compact "what was tried"
+        // summary. The next spawn (whether §4.5 auto-restart, human /execute,
+        // or a while_not_done loop) reads these back via renderIterationHistory
+        // above so the fresh context doesn't repeat the same fix.
+        if (!result.passed) {
+          const prevMax = (db.query(
+            "SELECT MAX(iteration) as n FROM iteration_memories WHERE task_id = ?",
+          ).get(taskId) as { n: number | null } | null)?.n ?? 0;
+          const nextIter = (prevMax ?? 0) + 1;
+          // The git_diff artifact for THIS execution captures what implement
+          // just did — usually the smoking gun for why verify failed.
+          const gitDiff = (db.query(
+            "SELECT content FROM artifacts WHERE task_id = ? AND kind = 'git_diff' ORDER BY created_at DESC LIMIT 1",
+          ).get(taskId) as { content: string } | null)?.content ?? null;
+          const iterMem = buildIterationMemory({
+            taskTitle: task.title,
+            iteration: nextIter,
+            testOutput: result.output,
+            gitDiff,
+            exitCode: result.exitCode,
+          });
+          try {
+            db.query(
+              `INSERT INTO iteration_memories (id, task_id, iteration, summary, test_output_tail, git_diff_head, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            ).run(
+              crypto.randomUUID(), taskId, nextIter,
+              iterMem.summary, iterMem.testOutputTail, iterMem.gitDiffHead, finishedAt,
+            );
+          } catch (err) {
+            console.warn(`[iteration-memory] insert failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+
+        // ─── §5.1 Loop policy — resolve the effective knobs ─────────────
+        // The task can override the escalation threshold + thrash toggle
+        // via task.loopPolicy. Nulls fall through to the tddEnabled-based
+        // defaults (see packages/core/src/loop/policy.ts).
+        const policy = resolveLoopPolicy(task.tddEnabled, task.loopPolicy as PartialLoopPolicy | null);
+
+        // ─── §5.3 Thrash detection ──────────────────────────────────────
+        // Before the §4.5 auto-restart kicks in, check whether the failure
+        // pattern already looks stuck (repeated identical error, or two
+        // implement runs producing zero diff). If so, raise a decision
+        // ticket with the history + leave the task blocked. The user
+        // decides whether to bump the tier, edit the task, or abort.
+        if (!result.passed && policy.escalation.thrashDetection) {
+          // Pull the most recent verify_tests + implement executions plus
+          // their git_diff sizes so the detector can reason over the pattern.
+          const recentRows = db.query(
+            `SELECT e.status, e.tdd_phase, e.error_message,
+                    (SELECT LENGTH(a.content) FROM artifacts a
+                       WHERE a.execution_id = e.id AND a.kind = 'git_diff' LIMIT 1) AS git_diff_length
+             FROM executions e
+             WHERE e.task_id = ?
+             ORDER BY e.started_at DESC
+             LIMIT 6`,
+          ).all(taskId) as Array<{
+            status: string; tdd_phase: string | null; error_message: string | null; git_diff_length: number | null;
+          }>;
+          const samples: ExecutionSample[] = recentRows.map((r) => ({
+            status: r.status,
+            tddPhase: r.tdd_phase,
+            errorMessage: r.error_message,
+            gitDiffLength: r.git_diff_length ?? 0,
+          }));
+          const verdict = detectThrash(samples);
+          if (verdict.thrash) {
+            // Raise a decision ticket so the user sees the pattern and steers.
+            const ticketId = crypto.randomUUID();
+            const context = [
+              `Thrash signal: ${verdict.signal}`,
+              verdict.reason ?? "",
+              "",
+              ...(verdict.history ?? []),
+            ].filter(Boolean).join("\n");
+            try {
+              db.query(
+                `INSERT INTO decision_tickets (id, task_id, execution_id, question, context, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+              ).run(ticketId, taskId, executionId, "The task is thrashing — how should we proceed?", context, finishedAt);
+              this.broadcast(taskId, {
+                type: "text",
+                text: `[thrash] ${verdict.signal} — decision ticket raised, task blocked for human input.`,
+              });
+            } catch (err) {
+              console.warn(`[thrash] failed to insert ticket: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            // Skip §4.5 auto-escalation this time; land blocked as usual.
+            db.query(
+              "UPDATE tasks SET failed_verify_count = ?, updated_at = ? WHERE id = ?",
+            ).run(2, finishedAt, taskId);
+          }
+        }
+
+        // ─── §4.5 Model-router-v2 escalation ────────────────────────────
+        // Two consecutive verify_tests failures on a TDD task → escalate
+        // the tier one step (haiku→sonnet→opus), reset the failure counter,
+        // reset the phase back to `implement`, and auto-re-run. If we're
+        // already at opus, the escalation short-circuits and we fall through
+        // to the normal blocked-for-human path.
+        // Thrash short-circuits this — if we raised a ticket above the
+        // failed_verify_count is already at 2 but we won't touch tier.
+        // Re-check via DB so we don't double-count.
+        const thrashOpen = !result.passed && !!db.query(
+          `SELECT 1 FROM decision_tickets WHERE execution_id = ? AND answer IS NULL LIMIT 1`,
+        ).get(executionId);
+        if (!result.passed && task.tddEnabled && !thrashOpen) {
+          const prevCount = Number(
+            (db.query("SELECT failed_verify_count FROM tasks WHERE id = ?").get(taskId) as { failed_verify_count: number } | null)?.failed_verify_count ?? 0,
+          );
+          const newCount = prevCount + 1;
+          if (newCount >= policy.escalation.escalateAfterFailures) {
+            const from: ModelTier = (task.modelTier ?? "sonnet") as ModelTier;
+            const to = nextTier(from);
+            if (to) {
+              db.query(
+                "UPDATE tasks SET failed_verify_count = 0, model_tier = ?, tdd_phase = 'implement', status = 'in_progress', last_error = NULL, active_form = NULL, updated_at = ? WHERE id = ?",
+              ).run(to, finishedAt, taskId);
+              this.broadcast(taskId, {
+                type: "text",
+                text: `[router-v2] tier escalated ${from} → ${to} after ${newCount} failed verify loops`,
+              });
+              this.broadcast(taskId, { type: "execution_complete", status: "completed", executionId });
+              this.closeAll(taskId);
+              this.active.delete(taskId);
+              // Re-run on next tick so the finally-blocks / drain settle first.
+              queueMicrotask(() => {
+                void this._run(taskId).catch((err) => console.error(`[router-v2 restart] ${taskId}: ${err}`));
+              });
+              this._drainQueue();
+              return;
+            }
+            // Already at opus — leave the counter at newCount so a resume+re-run
+            // does not immediately escalate again.
+            db.query(
+              "UPDATE tasks SET failed_verify_count = ?, updated_at = ? WHERE id = ?",
+            ).run(newCount, finishedAt, taskId);
+          } else {
+            // First failure — bump the counter, fall through to normal blocked.
+            db.query(
+              "UPDATE tasks SET failed_verify_count = ?, updated_at = ? WHERE id = ?",
+            ).run(newCount, finishedAt, taskId);
+          }
+        } else if (result.passed) {
+          // Success — reset the counter so future TDD cycles start clean.
+          db.query(
+            "UPDATE tasks SET failed_verify_count = 0, updated_at = ? WHERE id = ?",
+          ).run(finishedAt, taskId);
+        }
+
+        const nextStatus = result.passed ? "in_review" : "blocked";
+        const lastError = result.passed ? null : `Tests failed (exit ${result.exitCode})`;
+        db.query(
+          "UPDATE tasks SET status = ?, active_form = NULL, last_error = ?, updated_at = ? WHERE id = ?",
+        ).run(nextStatus, lastError, finishedAt, taskId);
+
+        // §D — write the task memory once verify_tests goes green. Downstream
+        // DAG tasks will read this on their next spawn (see buildL1Pack above).
+        if (result.passed) this._persistTaskMemory(taskId, finishedAt);
+
         this.broadcast(taskId, { type: "execution_complete", status, executionId });
         this.closeAll(taskId);
         this.active.delete(taskId);
@@ -591,6 +816,14 @@ class ExecutionManager {
         "UPDATE tasks SET status = ?, active_form = NULL, last_error = ?, updated_at = ? WHERE id = ?",
       ).run(nextTaskStatus, nextLastError, finishedAt, taskId);
 
+      // §D — write the task memory once a non-TDD (implement_only) task
+      // reaches in_review. TDD tasks write their memory from the verify_tests
+      // handler above so the summary reflects the code that shipped, not just
+      // the failing tests written first.
+      if (effectiveStatus === "completed" && nextTaskStatus === "in_review") {
+        this._persistTaskMemory(taskId, finishedAt);
+      }
+
       const broadcastStatus = effectiveStatus === "awaiting_human" ? "failed" : effectiveStatus;
       this.broadcast(taskId, {
         type: effectiveStatus === "awaiting_human" ? "awaiting_human" : "execution_complete",
@@ -621,6 +854,68 @@ class ExecutionManager {
         }
       : task;
 
+    // PRD 3.4 — L0 constitution loaded per-execution so mid-run edits to
+    // CLAUDE.md / .agent-trail/context/*.md land in the next task without a
+    // server restart. Cap enforced inside loadConstitution.
+    const constitutionText = loadConstitution(REPO_ROOT).content;
+
+    // PRD 4.4 — per-task L1 pack. Adds the task's own scope + a
+    // short summary of every DAG dependency's memory (if written), plus
+    // the top-N most-likely-relevant repo paths from the term-overlap
+    // ranker. Strategic context per task instead of dumping the full board
+    // history into every prompt.
+    const taskText = [task.title, task.description, ...(task.successCriteria ?? [])].join(" ");
+    const repoRoot = task.worktreePath || implementationDir || REPO_ROOT;
+    let relevantFiles: string[] = [];
+    try {
+      relevantFiles = rankRelevantFiles(taskText, { root: repoRoot, topN: 8 }).map((f) => f.path);
+    } catch {
+      relevantFiles = [];
+    }
+    // §4.4b — pull pending steers for this task and mark them consumed at
+    // spawn time so they land in the very next iteration and don't get
+    // replayed on future ones.
+    const pendingSteers = db.query(
+      "SELECT id, kind, text, created_at FROM steering WHERE task_id = ? AND consumed_at IS NULL ORDER BY created_at ASC",
+    ).all(taskId) as Array<{ id: string; kind: string; text: string; created_at: string }>;
+    if (pendingSteers.length > 0) {
+      const stampedAt = new Date().toISOString();
+      const consumeStmt = db.prepare("UPDATE steering SET consumed_at = ? WHERE id = ?");
+      for (const s of pendingSteers) consumeStmt.run(stampedAt, s.id);
+    }
+
+    // §5.2 — read the latest iteration memories for THIS task so the fresh
+    // spawn knows what previous attempts tried + failed with. Kept to the 3
+    // most recent to bound the pack size.
+    const iterRows = db.query(
+      "SELECT iteration, summary, test_output_tail, git_diff_head FROM iteration_memories WHERE task_id = ? ORDER BY iteration DESC LIMIT 3",
+    ).all(taskId) as Array<{ iteration: number; summary: string; test_output_tail: string | null; git_diff_head: string | null }>;
+    const iterationHistory = renderIterationHistory(
+      iterRows.map<IterationSample>((r) => ({
+        iteration: r.iteration,
+        summary: r.summary,
+        testOutputTail: r.test_output_tail,
+        gitDiffHead: r.git_diff_head,
+      })),
+    );
+
+    const l1 = buildL1Pack(REPO_ROOT, {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      successCriteria: task.successCriteria,
+      dependsOn: task.dependsOn,
+    }, {
+      relevantFiles,
+      steers: pendingSteers.map((s) => ({ kind: s.kind, text: s.text, createdAt: s.created_at })),
+      iterationHistory,
+    });
+    // Concatenate L0 + L1. L1 goes AFTER the constitution so team rulings
+    // dominate; L1 is scaffolding for this specific task.
+    const constitution = [constitutionText, l1.content ? `## Task pack (L1)\n\n${l1.content}` : ""]
+      .filter(Boolean)
+      .join("\n\n");
+
     const proc = spawnClaudeCode({
       task: taskWithDecision,
       worktreePath,
@@ -628,6 +923,7 @@ class ExecutionManager {
       permissionMode,
       timeoutMs: executionTimeoutMs,
       resumeSessionId: resume?.resumeSessionId,
+      constitution,
       callbacks: {
         onEvent: (raw, parsed) => {
           // PRD_OPEN_SOURCE 2.2 — capture claude session_id as soon as it

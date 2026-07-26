@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Wand2, FileText, Loader2 } from "lucide-react";
+import { Wand2, FileText, Loader2, Sparkles } from "lucide-react";
 import { api } from "../lib/api.ts";
 import type { PlanResult, ExampleFile } from "../lib/api.ts";
+import { IdeaWizard } from "./IdeaWizard.tsx";
 
 interface Props {
   onPlanned: (result: PlanResult) => void;
@@ -17,10 +18,20 @@ export function EmptyBoardState({ onPlanned, onOpenPlan }: Props) {
   const [examples, setExamples] = useState<ExampleFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     api.examples.list().then(setExamples).catch(() => setExamples([]));
   }, []);
+
+  if (showWizard) {
+    return (
+      <IdeaWizard
+        onCancel={() => setShowWizard(false)}
+        onPlanned={(r) => { setShowWizard(false); onPlanned(r); }}
+      />
+    );
+  }
 
   async function planExample(name: string) {
     setLoading(true);
@@ -60,26 +71,36 @@ export function EmptyBoardState({ onPlanned, onOpenPlan }: Props) {
       )}
 
       <div className="flex flex-col items-center gap-2">
-        {primary && (
-          <button
-            className="claw-btn primary"
-            onClick={() => planExample(primary.name)}
-            disabled={loading}
-            style={{ fontSize: 11, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6 }}
-          >
-            {loading ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
-            {loading ? "planning…" : `plan the sample PRD: ${primary.title}`}
-          </button>
-        )}
-
         <button
-          className="claw-btn"
-          onClick={onOpenPlan}
+          className="claw-btn primary"
+          onClick={() => setShowWizard(true)}
           disabled={loading}
-          style={{ fontSize: 10, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}
+          style={{ fontSize: 11, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6 }}
         >
-          <FileText size={10} /> paste your own PRD
+          <Sparkles size={11} /> start from an idea
         </button>
+        <div className="flex items-center gap-2" style={{ color: "var(--fg-faded)" }}>
+          <div className="text-[10px]">or:</div>
+          {primary && (
+            <button
+              className="claw-btn"
+              onClick={() => planExample(primary.name)}
+              disabled={loading}
+              style={{ fontSize: 10, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}
+            >
+              {loading ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+              {loading ? "planning…" : `try sample: ${primary.title}`}
+            </button>
+          )}
+          <button
+            className="claw-btn"
+            onClick={onOpenPlan}
+            disabled={loading}
+            style={{ fontSize: 10, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}
+          >
+            <FileText size={10} /> paste PRD
+          </button>
+        </div>
       </div>
 
       {secondary.length > 0 && (

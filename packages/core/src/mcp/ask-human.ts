@@ -13,10 +13,12 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Database } from "bun:sqlite";
+import { readTaskMemory, listTaskMemories } from "../context/memory.ts";
 
 const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
 const TASK_ID = process.env["AGENT_TRAIL_TASK_ID"] ?? process.env["VIBE_BOARD_TASK_ID"];
 const EXECUTION_ID = process.env["AGENT_TRAIL_EXECUTION_ID"] ?? process.env["VIBE_BOARD_EXECUTION_ID"];
+const REPO_ROOT = process.env["AGENT_TRAIL_ROOT"] ?? process.cwd();
 
 if (!DB_PATH || !TASK_ID || !EXECUTION_ID) {
   process.stderr.write(
@@ -56,10 +58,62 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["question"],
       },
     },
+    {
+      name: "get_task_memory",
+      description:
+        "Read the persisted summary of a previously-completed task on this board. " +
+        "Useful when your current task references work another task did — you get a " +
+        "compact summary (files touched, decisions raised, criteria met) instead of " +
+        "having to grep through logs. Returns null when no memory exists yet.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string", description: "The task id to look up." },
+        },
+        required: ["taskId"],
+      },
+    },
+    {
+      name: "list_task_memories",
+      description:
+        "List every persisted task memory on this board, newest-first. Returns id + title + " +
+        "one-line summary per memory. Use before get_task_memory when you don't know the exact id.",
+      inputSchema: { type: "object", properties: {} },
+    },
   ],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  // §4.4 — context orchestrator retrieval tools.
+  if (req.params.name === "get_task_memory") {
+    const { taskId } = req.params.arguments as { taskId: string };
+    const memory = readTaskMemory(REPO_ROOT, taskId);
+    return {
+      content: [{
+        type: "text",
+        text: memory === null
+          ? `no memory found for task ${taskId} — it may not have completed yet.`
+          : JSON.stringify(memory, null, 2),
+      }],
+    };
+  }
+  if (req.params.name === "list_task_memories") {
+    const memories = listTaskMemories(REPO_ROOT).map((m) => ({
+      taskId: m.taskId,
+      title: m.taskTitle,
+      completedAt: m.completedAt,
+      summaryFirstLine: m.summary.split("\n")[0] ?? "",
+    }));
+    return {
+      content: [{
+        type: "text",
+        text: memories.length === 0
+          ? "no task memories on this board yet."
+          : JSON.stringify(memories, null, 2),
+      }],
+    };
+  }
+
   if (req.params.name !== "ask_human") {
     throw new Error(`Unknown tool: ${req.params.name}`);
   }

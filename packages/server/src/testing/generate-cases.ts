@@ -61,6 +61,7 @@ Output ONLY a valid JSON object — no markdown fences, no explanation:
   "cases": [
     {
       "criterionIndex": 0,
+      "category": "happy",
       "label": "Short imperative label for the case",
       "kind": "api",
       "method": "POST",
@@ -76,7 +77,10 @@ Output ONLY a valid JSON object — no markdown fences, no explanation:
 }
 
 Rules:
-- Emit 1-3 cases per criterion. Prioritise the happy path first.
+- Emit 2-5 cases per criterion. AT LEAST one \`happy\` case AND at least one \`negative\` case per criterion.
+- Include an \`edge\` case whenever the criterion mentions a boundary (empty input, pagination, max length, unicode).
+- Use \`error\` for expected server-side failures (auth, rate-limit, timeout, upstream 5xx).
+- category MUST be one of: happy | edge | negative | error | boundary | perf.
 - Prefer typed assertions: status / status_in / body_contains / json_path / response_time_ms.
 - Use path/body/headers as literal strings — {{env.KEY}} placeholders are allowed for secrets that will be substituted server-side.
 - For chained cases, set dependsOnCaseId to a prior case's label (server will resolve at run time).
@@ -86,6 +90,7 @@ Rules:
 
 interface RawGeneratedCase {
   criterionIndex?: number;
+  category?: "happy" | "edge" | "negative" | "error" | "boundary" | "perf";
   label?: string;
   kind?: "api" | "shell";
   method?: string;
@@ -138,6 +143,10 @@ export async function generateCasesWithAgent(
       coerced.push({
         id: `case-${crypto.randomUUID()}`,
         criterionIndex: c.criterionIndex ?? 0,
+        // Default missing category to `happy` (matches the TestCase.category doc);
+        // planner + agent-generated cases are both encouraged to set it, but a
+        // hand-written case that skips it should still work.
+        category: c.category ?? "happy",
         label: c.label,
         kind: c.kind ?? "api",
         method: c.method,

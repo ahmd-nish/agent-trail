@@ -12,12 +12,17 @@ import { exportRouter } from "./routes/export.ts";
 import { planRouter } from "./routes/plan.ts";
 import { examplesRouter } from "./routes/examples.ts";
 import { agentsRouter } from "./routes/agents.ts";
+import { ideasRouter } from "./routes/ideas.ts";
+import { libraryRouter } from "./routes/library.ts";
+import { steeringRouter } from "./routes/steering.ts";
+import { deployRouter } from "./routes/deploy.ts";
 import { testExecutionRouter } from "./routes/test-execution.ts";
 import { testHistoryRouter } from "./routes/test-history.ts";
 import { devServerRouter } from "./routes/dev-server.ts";
 import { getDb } from "./db.ts";
 import { executionManager } from "./execution-manager.ts";
 import { resolveProjectRoot } from "../../core/src/storage/paths.ts";
+import { hydrateFromFile, startAutoSync } from "../../core/src/context/sync.ts";
 
 const RUNNER_URL = process.env["AGENT_TRAIL_RUNNER_URL"] ?? process.env["VIBE_BOARD_RUNNER_URL"] ?? "http://localhost:3003";
 const PROJECT_ROOT = resolveProjectRoot();
@@ -79,6 +84,10 @@ app.route("/api", exportRouter);
 app.route("/api/boards", planRouter);
 app.route("/api", examplesRouter);
 app.route("/api", agentsRouter);
+app.route("/api", ideasRouter);
+app.route("/api", libraryRouter);
+app.route("/api", steeringRouter);
+app.route("/api", deployRouter);
 app.route("/api", testExecutionRouter);
 app.route("/api", testHistoryRouter);
 app.route("/api", devServerRouter);
@@ -137,9 +146,28 @@ if (WEB_DIST) {
 }
 
 // Initialize DB on startup + recover orphan executions from a prior crash.
-getDb();
+const db = getDb();
 executionManager.recoverFromCrash();
 ensureRunner();
+
+// PRD_OPEN_SOURCE §3.1 — team-context sync. Hydrate the DB from
+// `.agent-trail/state.json` (a teammate cloned the repo and is booting for
+// the first time), then start the auto-writer so future mutations flow back
+// to disk. Both are no-ops when the file doesn't exist / nothing changed.
+try {
+  const hydrated = hydrateFromFile(db, PROJECT_ROOT);
+  if (hydrated && !hydrated.skippedVersion) {
+    console.log(`[state-sync] hydrated ${hydrated.boardsUpserted} board(s), ${hydrated.tasksUpserted} task(s) from state.json`);
+  } else if (hydrated?.skippedVersion) {
+    console.warn("[state-sync] state.json schema version unknown — leaving DB untouched");
+  }
+} catch (err) {
+  console.warn(`[state-sync] hydrate failed: ${err instanceof Error ? err.message : String(err)}`);
+}
+if (process.env["AGENT_TRAIL_SKIP_AUTOSYNC"] !== "1") {
+  const intervalMs = Number(process.env["AGENT_TRAIL_AUTOSYNC_MS"] ?? 2000);
+  startAutoSync(db, PROJECT_ROOT, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 2000);
+}
 
 const port = Number(process.env["AGENT_TRAIL_PORT"] ?? process.env["PORT"] ?? 3002);
 console.log(`agent-trail server running on http://localhost:${port}`);

@@ -140,6 +140,12 @@ tasksRouter.patch("/tasks/:taskId", async (c) => {
     values.push(body.modelTier);
   }
   stringField("component", body.component);
+  // §5.1 loop policy — accept a JSON partial. null clears the override.
+  if ((body as Partial<Task> & { loopPolicy?: unknown }).loopPolicy !== undefined) {
+    const lp = (body as Partial<Task> & { loopPolicy?: unknown }).loopPolicy;
+    updates.push("loop_policy = ?");
+    values.push(lp === null ? null : JSON.stringify(lp));
+  }
 
   if (updates.length === 0) return c.json({ error: "no fields to update" }, 400);
 

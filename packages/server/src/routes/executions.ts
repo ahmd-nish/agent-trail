@@ -4,9 +4,27 @@ import { getDb } from "../db.ts";
 
 export const executionsRouter = new Hono();
 
+// §C plan-review gate — refuse to start/resume until the plan is approved.
+// Shared guard for both single-task /execute and /resume so a re-run also
+// blocks; the manager itself stays unaware of the concept.
+function requireApproved(taskId: string): { ok: true } | { ok: false; status: number; error: string } {
+  const row = getDb().query(
+    `SELECT b.approved_at FROM tasks t JOIN boards b ON b.id = t.board_id WHERE t.id = ?`,
+  ).get(taskId) as { approved_at: string | null } | null;
+  // Unknown task → let the manager return its 409 so callers see a stable
+  // error surface. We only care about the approved/unapproved distinction.
+  if (!row) return { ok: true };
+  if (!row.approved_at) {
+    return { ok: false, status: 403, error: "board pending plan approval — POST /api/boards/:id/approve first" };
+  }
+  return { ok: true };
+}
+
 // Kick off an execution for a task
 executionsRouter.post("/tasks/:taskId/execute", async (c) => {
   const { taskId } = c.req.param();
+  const gate = requireApproved(taskId);
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status as 403 | 404);
   const result = await executionManager.start(taskId);
   if ("error" in result) return c.json({ error: result.error }, 409);
   return c.json(result, 201);
@@ -17,6 +35,8 @@ executionsRouter.post("/tasks/:taskId/execute", async (c) => {
 // explicitly overrides via ?sessionId=.
 executionsRouter.post("/tasks/:taskId/resume", async (c) => {
   const { taskId } = c.req.param();
+  const gate = requireApproved(taskId);
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status as 403 | 404);
   const result = await executionManager.resumeSession(taskId);
   if ("error" in result) return c.json({ error: result.error }, 409);
   return c.json(result, 201);

@@ -1,0 +1,152 @@
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createServer } from "node:net";
+
+// PRD_OPEN_SOURCE §5.1 — Task.loopPolicy override.
+// A task can dial down escalation and disable thrash detection via its
+// loopPolicy. This test proves those overrides reach the execution manager.
+
+const SERVER_ENTRY = join(import.meta.dir, "index.ts");
+const PASS_MOCK = JSON.stringify({
+  events: [{ type: "assistant", message: { content: [{ type: "text", text: "ok" }] } }],
+  final: "complete", inputTokens: 10, outputTokens: 5, durationMs: 5,
+});
+
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.once("error", reject);
+    srv.once("listening", () => {
+      const addr = srv.address();
+      if (!addr || typeof addr === "string") { srv.close(); reject(new Error("no port")); return; }
+      const port = addr.port;
+      srv.close(() => resolve(port));
+    });
+    srv.listen(0, "127.0.0.1");
+  });
+}
+async function waitForHealth(port: number, ms = 15000): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`http://localhost:${port}/api/health`, { signal: AbortSignal.timeout(500) });
+      if (r.ok) return true;
+    } catch { /* keep polling */ }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
+async function pollFor<T>(fn: () => Promise<T | null>, timeoutMs = 15000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const v = await fn();
+    if (v !== null) return v;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("pollFor timeout");
+}
+
+interface BoardResp { id: string }
+interface TaskResp  { id: string; status: string; modelTier: string | null }
+interface Ticket    { id: string; question: string }
+
+describe("loopPolicy — PRD §5.1 override reaches the manager", () => {
+  let child: ChildProcess | undefined;
+  let port = 0;
+  let tmp = "";
+  let boardId = "";
+  let failDir = "";
+
+  beforeAll(async () => {
+    tmp = mkdtempSync(join(tmpdir(), "at-loop-policy-e2e-"));
+    failDir = join(tmp, "loop-work");
+    mkdirSync(failDir, { recursive: true });
+    writeFileSync(join(failDir, "package.json"), JSON.stringify({
+      name: "loop", type: "module", scripts: { test: "bun test" },
+    }), "utf-8");
+    writeFileSync(join(failDir, "boom.test.ts"), `
+      import { describe, test, expect } from "bun:test";
+      describe("policy suite", () => {
+        test("intentionally red", () => { expect(1).toBe(2); });
+      });
+    `, "utf-8");
+    port = await findFreePort();
+    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    child = spawn("bun", [SERVER_ENTRY], {
+      cwd: tmp,
+      env: {
+        ...cleanEnv,
+        AGENT_TRAIL_PORT: String(port),
+        AGENT_TRAIL_ROOT: tmp,
+        AGENT_TRAIL_SKIP_RUNNER: "1",
+        AGENT_TRAIL_SKIP_AUTOSYNC: "1",
+        AGENT_TRAIL_CLAUDE_MOCK: PASS_MOCK,
+      },
+      stdio: "ignore",
+    });
+    const up = await waitForHealth(port);
+    if (!up) throw new Error(`server did not become ready on ${port}`);
+    boardId = (await (await fetch(`http://localhost:${port}/api/boards`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "loop-policy", implementationDir: failDir }),
+    })).json() as BoardResp).id;
+  }, 30000);
+
+  afterAll(async () => {
+    child?.kill("SIGTERM");
+    await new Promise((r) => setTimeout(r, 250));
+    if (tmp) rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test("policy override — thrashDetection=false + escalateAfterFailures=1 → tier escalates on FIRST failure", async () => {
+    // Create the task, then PATCH the loopPolicy in via a direct DB write is
+    // not available over HTTP right now (tasks PATCH doesn't accept loopPolicy
+    // yet). We seed it via the wizard-style `POST /api/tasks` body which is
+    // what the planner uses — supported fields include arbitrary extras
+    // because coerceTask spreads.
+    //
+    // Actually POST /api/boards/:id/tasks only accepts a fixed schema; test
+    // via the `tasks` PATCH endpoint below (which does spread) once created.
+    const created = await (await fetch(`http://localhost:${port}/api/boards/${boardId}/tasks`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "escalate-fast",
+        tddEnabled: true,
+        tddPhase: "verify_tests",
+        modelTier: "sonnet",
+      }),
+    })).json() as TaskResp;
+
+    // Apply the override.
+    const patchRes = await fetch(`http://localhost:${port}/api/tasks/${created.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        loopPolicy: {
+          escalation: { escalateAfterFailures: 1, thrashDetection: false },
+        },
+      }),
+    });
+    expect(patchRes.ok).toBe(true);
+
+    // ONE failure should now escalate.
+    await fetch(`http://localhost:${port}/api/tasks/${created.id}/execute`, { method: "POST" });
+    const escalated = await pollFor(async () => {
+      const list = await (await fetch(`http://localhost:${port}/api/boards/${boardId}/tasks`)).json() as TaskResp[];
+      const t = list.find((r) => r.id === created.id);
+      return t && t.modelTier === "opus" ? t : null;
+    });
+    expect(escalated.modelTier).toBe("opus");
+
+    // No thrash ticket because we turned thrash detection off.
+    const tickets = await (await fetch(`http://localhost:${port}/api/tasks/${created.id}/decisions`)).json() as Ticket[];
+    expect(tickets.filter((t) => t.question.includes("thrashing")).length).toBe(0);
+
+    // Let the auto-restart drain so afterAll doesn't tear the DB out mid-write.
+    await fetch(`http://localhost:${port}/api/tasks/${created.id}/stop`, { method: "POST" }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
+  }, 30000);
+});

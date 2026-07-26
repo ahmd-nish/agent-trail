@@ -87,6 +87,10 @@ export interface Board {
   autoPr: boolean;
   /** "conventional" | "plain" — style of message the commit agent emits. */
   commitStyle: string;
+  /** PRD_OPEN_SOURCE §C — plan-review gate. Null while the wizard/planner
+   *  is still producing the graph AND while the human hasn't reviewed the
+   *  plan; ISO date once approved. Execution is blocked while null. */
+  approvedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +131,14 @@ export interface Task {
   component: string | null;
   externalDependencies: string[];
   testCases: TestCase[];
+  /** PRD_OPEN_SOURCE §5.1 — loop-engineering policy. Null = use the
+   *  tddEnabled-based defaults from `packages/core/src/loop/policy.ts`. */
+  loopPolicy: unknown | null;
+  /** PRD_OPEN_SOURCE §4.7 — repo paths this task is expected to touch.
+   *  The board runner uses this to serialise DAG-independent tasks whose
+   *  footprints overlap, preventing worktree merge conflicts. Populated
+   *  by the planner; user can edit. Empty array = no known footprint. */
+  likelyPaths: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -251,6 +263,11 @@ export interface TestCase {
    *  clean up (delete created rows, log out, etc.). Failures here surface
    *  as warnings — they don't flip a passed case to failed. */
   teardown?: TestCaseHook[];
+  // ── Coverage taxonomy (PRD_OPEN_SOURCE §B) ─────────────────────────────
+  /** Which class of behavior this case exercises. Used by the planner + case
+   *  generator to enforce broad coverage, and by the UI to display badges.
+   *  Absent → treated as `happy` for backward-compat with older test cases. */
+  category?: "happy" | "edge" | "negative" | "error" | "boundary" | "perf";
   // ── Heuristic transparency ─────────────────────────
   /** Free-form notes the generator left explaining how this case was inferred. */
   notes?: string;
