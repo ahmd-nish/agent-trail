@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Wand2, Play, Flame, Zap } from "lucide-react";
+import { Wand2, Play, Flame, Zap, Sparkles } from "lucide-react";
 import type { Board, Task, TaskStatus } from "../../core/src/types/index.ts";
 import { api } from "./lib/api.ts";
 import { Board as KanbanBoard } from "./components/Board.tsx";
@@ -8,6 +8,7 @@ import { EpicView } from "./components/EpicView.tsx";
 import { DashboardView } from "./components/DashboardView.tsx";
 import { PlanModal } from "./components/PlanModal.tsx";
 import { EmptyBoardState } from "./components/EmptyBoardState.tsx";
+import { IdeaWizard } from "./components/IdeaWizard.tsx";
 import { DagView } from "./components/DagView.tsx";
 import { BoardSettings } from "./components/BoardSettings.tsx";
 import { DevServerPill } from "./components/DevServerPill.tsx";
@@ -37,6 +38,7 @@ export function App() {
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showIdeaWizard, setShowIdeaWizard] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [boardRunning, setBoardRunning] = useState(false);
   const [runStats, setRunStats] = useState<{ activeCount: number; queuedCount: number; maxConcurrent: number } | null>(null);
@@ -428,6 +430,14 @@ export function App() {
           <div className="w-px h-3 shrink-0" style={{ background: "var(--line)" }} />
 
           <button
+            onClick={() => setShowIdeaWizard(true)}
+            className="claw-btn primary"
+            style={{ fontSize: 10, padding: "3px 10px", display: "flex", alignItems: "center", gap: 4 }}
+          >
+            <Sparkles size={10} /> idea
+          </button>
+
+          <button
             onClick={() => setShowPlanModal(true)}
             className="claw-btn"
             style={{ fontSize: 10, padding: "3px 10px", display: "flex", alignItems: "center", gap: 4 }}
@@ -599,6 +609,38 @@ export function App() {
             handlePlanResult(result);
           }}
         />
+      )}
+
+      {/* Idea → PRD wizard modal (reachable from header once a board exists) */}
+      {showIdeaWizard && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgba(0,0,0,0.75)" }}
+            onClick={() => setShowIdeaWizard(false)}
+          />
+          <div
+            className="relative flex flex-col overflow-hidden"
+            style={{
+              width: 720,
+              maxWidth: "94vw",
+              maxHeight: "90vh",
+              background: "var(--bg-pane)",
+              border: "1px solid var(--line)",
+              borderRadius: 4,
+            }}
+          >
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <IdeaWizard
+                onCancel={() => setShowIdeaWizard(false)}
+                onPlanned={(result) => {
+                  setShowIdeaWizard(false);
+                  handlePlanResult(result);
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Scout mascot — always visible (dismissable per-browser via localStorage).

@@ -149,16 +149,22 @@ export const api = {
     get: (name: string) => req<AgentEntry & { body: string }>(`/api/agents/${encodeURIComponent(name)}`),
   },
   ideas: {
-    start: (idea: string) =>
-      req<IdeaState>("/api/ideas/start", { method: "POST", body: JSON.stringify({ idea }) }),
+    start: (idea: string, modelTier?: "haiku" | "sonnet" | "opus") =>
+      req<IdeaState>("/api/ideas/start", {
+        method: "POST",
+        body: JSON.stringify({ idea, ...(modelTier ? { modelTier } : {}) }),
+      }),
     get: (id: string) => req<IdeaState>(`/api/ideas/${id}`),
     answer: (id: string, key: string, value: string | string[], note?: string) =>
       req<IdeaState>(`/api/ideas/${id}/answer`, {
         method: "POST",
         body: JSON.stringify({ key, value, ...(note ? { note } : {}) }),
       }),
-    synthesizePrd: (id: string) =>
-      req<IdeaState>(`/api/ideas/${id}/synthesize-prd`, { method: "POST" }),
+    synthesizePrd: (id: string, modelTier?: "haiku" | "sonnet" | "opus") =>
+      req<IdeaState>(`/api/ideas/${id}/synthesize-prd`, {
+        method: "POST",
+        body: JSON.stringify(modelTier ? { modelTier } : {}),
+      }),
     linkBoard: (id: string, boardId: string) =>
       req<IdeaState>(`/api/ideas/${id}/link-board`, {
         method: "POST",

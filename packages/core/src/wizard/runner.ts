@@ -1,12 +1,13 @@
-import { MODEL_FOR_TIER } from "../planner/models.ts";
+import { MODEL_FOR_TIER, type ModelTier } from "../planner/models.ts";
 
 /**
- * Wizard LLM call — Sonnet by default (user opted for a "strong model"), same
+ * Wizard LLM call — defaults to Opus (top-of-ladder) so the plan is the
+ * highest-quality output; caller may downshift for cheaper runs. Same
  * mock-first pattern as the planner. Tests set AGENT_TRAIL_IDEA_MOCK to either
  *   • raw JSON / markdown  (returned verbatim as the response), or
  *   • `file:<path>`        (contents of the file, useful for large fixtures).
  */
-export async function runIdeaLLM(prompt: string): Promise<string> {
+export async function runIdeaLLM(prompt: string, tier: ModelTier = "opus"): Promise<string> {
   const mock = process.env["AGENT_TRAIL_IDEA_MOCK"];
   if (mock) {
     if (mock.startsWith("file:")) {
@@ -22,10 +23,7 @@ export async function runIdeaLLM(prompt: string): Promise<string> {
     );
   }
 
-  // Strong model for both stack-question generation AND PRD synthesis. Cost is
-  // amortised over the whole build; a bad plan is much more expensive than
-  // saving 10 cents on the plan itself.
-  const model = MODEL_FOR_TIER.sonnet;
+  const model = MODEL_FOR_TIER[tier];
   const proc = Bun.spawn(
     ["claude", "-p", prompt, "--model", model, "--output-format", "json", "--no-session-persistence"],
     { stdout: "pipe", stderr: "pipe" },

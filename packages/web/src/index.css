@@ -25,6 +25,10 @@
   --purple-dim: rgba(192,137,233,0.12);
   --cyan:       #5EE3E8;
   --pink:       #FF7DD2;
+
+  /* aliases used by the idea wizard + theater overlay */
+  --accent:       #C089E9;   /* purple hue for "creative" mode */
+  --bg-panel-hi:  #141824;
 }
 
 /* ─── Global base ─────────────────────────────────────────────────────────── */

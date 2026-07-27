@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, ArrowLeft, ArrowRight, Sparkles, Check, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, ArrowLeft, ArrowRight, Sparkles, Check, X, Film } from "lucide-react";
 import { api } from "../lib/api.ts";
 import type { IdeaState, PlanResult, WizardQuestion } from "../lib/api.ts";
 
@@ -17,6 +17,14 @@ interface Props {
  * Step N+1: review answers + synthesize PRD via LLM.
  * Step N+2: preview the PRD, kick off /api/boards/plan, hand off.
  */
+type PlanTier = "opus" | "sonnet" | "haiku";
+
+const PLAN_TIERS: { key: PlanTier; label: string; hint: string; recommended?: boolean }[] = [
+  { key: "opus",   label: "Opus 4.7",   hint: "top quality — best plan, slowest, most expensive", recommended: true },
+  { key: "sonnet", label: "Sonnet 4.6", hint: "solid plan, faster, cheaper" },
+  { key: "haiku",  label: "Haiku 4.5",  hint: "quickest, roughest plan — good for tiny ideas" },
+];
+
 export function IdeaWizard({ onCancel, onPlanned }: Props) {
   const [idea, setIdea] = useState("");
   const [state, setState] = useState<IdeaState | null>(null);
@@ -25,6 +33,8 @@ export function IdeaWizard({ onCancel, onPlanned }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [planning, setPlanning] = useState(false);
+  const [planTier, setPlanTier] = useState<PlanTier>("opus");
+  const [synthesizing, setSynthesizing] = useState(false);
 
   const currentQuestion: WizardQuestion | null =
     state && step === "question" ? state.questions[questionIdx] ?? null : null;
@@ -43,7 +53,7 @@ export function IdeaWizard({ onCancel, onPlanned }: Props) {
     if (!idea.trim()) return;
     setBusy(true); setError(null);
     try {
-      const s = await api.ideas.start(idea.trim());
+      const s = await api.ideas.start(idea.trim(), planTier);
       setState(s);
       setStep("question");
       setQuestionIdx(0);
@@ -85,15 +95,16 @@ export function IdeaWizard({ onCancel, onPlanned }: Props) {
 
   async function synthesizePrd() {
     if (!state) return;
-    setBusy(true); setError(null);
+    setBusy(true); setSynthesizing(true); setError(null);
     try {
-      const updated = await api.ideas.synthesizePrd(state.id);
+      const updated = await api.ideas.synthesizePrd(state.id, planTier);
       setState(updated);
       setStep("prd");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      setSynthesizing(false);
     }
   }
 
@@ -131,7 +142,14 @@ export function IdeaWizard({ onCancel, onPlanned }: Props) {
       )}
 
       {step === "idea" && (
-        <IdeaStep idea={idea} onChange={setIdea} onNext={beginWizard} busy={busy} />
+        <IdeaStep
+          idea={idea}
+          onChange={setIdea}
+          onNext={beginWizard}
+          busy={busy}
+          planTier={planTier}
+          onTierChange={setPlanTier}
+        />
       )}
 
       {step === "question" && currentQuestion && state && (
@@ -162,6 +180,13 @@ export function IdeaWizard({ onCancel, onPlanned }: Props) {
           onBack={goBack}
           onPlan={planAndLink}
           planning={planning}
+        />
+      )}
+
+      {synthesizing && state && (
+        <PrdSynthesisTheater
+          ideaText={state.ideaText}
+          modelLabel={PLAN_TIERS.find((t) => t.key === planTier)?.label ?? planTier}
         />
       )}
     </div>
@@ -198,12 +223,15 @@ function Header({ step, onCancel, state, questionIdx }: {
   );
 }
 
-function IdeaStep({ idea, onChange, onNext, busy }: {
+function IdeaStep({ idea, onChange, onNext, busy, planTier, onTierChange }: {
   idea: string;
   onChange: (s: string) => void;
   onNext: () => void;
   busy: boolean;
+  planTier: PlanTier;
+  onTierChange: (t: PlanTier) => void;
 }) {
+  const activeLabel = PLAN_TIERS.find((t) => t.key === planTier)?.label ?? "Opus";
   return (
     <div className="flex flex-col gap-3">
       <div className="text-[11px]" style={{ color: "var(--fg-dim)" }}>
@@ -222,6 +250,50 @@ function IdeaStep({ idea, onChange, onNext, busy }: {
           fontFamily: "inherit",
         }}
       />
+
+      <div className="flex flex-col gap-1.5">
+        <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--fg-faded)" }}>
+          Planning model
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {PLAN_TIERS.map((t) => {
+            const isActive = planTier === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => onTierChange(t.key)}
+                disabled={busy}
+                className="text-left px-3 py-2 rounded flex flex-col gap-1"
+                style={{
+                  background: isActive ? "var(--bg-panel-hi)" : "var(--bg-panel)",
+                  border: `1px solid ${isActive ? "var(--accent)" : "var(--line)"}`,
+                  cursor: busy ? "not-allowed" : "pointer",
+                  opacity: busy ? 0.6 : 1,
+                }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11.5px] font-medium" style={{ color: "var(--fg)" }}>
+                    {t.label}
+                  </span>
+                  {t.recommended && (
+                    <span
+                      className="text-[8.5px] px-1 py-0.5 rounded uppercase tracking-wide"
+                      style={{ background: "var(--accent)", color: "var(--bg)" }}
+                    >
+                      rec
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] leading-snug" style={{ color: "var(--fg-dim)" }}>
+                  {t.hint}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex items-center justify-between gap-2">
         <div className="text-[10px]" style={{ color: "var(--fg-faded)" }}>
           {idea.length} / 4000
@@ -233,7 +305,7 @@ function IdeaStep({ idea, onChange, onNext, busy }: {
           style={{ fontSize: 11, padding: "5px 12px", display: "flex", alignItems: "center", gap: 6 }}
         >
           {busy ? <Loader2 size={11} className="animate-spin" /> : <ArrowRight size={11} />}
-          {busy ? "asking Sonnet for stack options…" : "next"}
+          {busy ? `asking ${activeLabel} for stack options…` : "next"}
         </button>
       </div>
     </div>
@@ -526,4 +598,296 @@ function PrdStep({ prd, onBack, onPlan, planning }: {
 function titleFromMarkdown(md: string): string | null {
   const m = md.match(/^#\s+(.+)$/m);
   return m?.[1]?.trim() ?? null;
+}
+
+// ─── Cinematic PRD synthesis overlay ────────────────────────────────────────
+// Full-screen director's-slate overlay while the LLM writes the PRD. Cycles
+// through fake "scenes" on a timer, streams a rolling ticker of quips, holds
+// the progress bar at 95% until the actual API call returns. No signals from
+// the LLM — this is purely for feel.
+
+const SYNTH_SCENES: { title: string; blurb: string }[] = [
+  { title: "SCENE 01 · reading your idea",   blurb: "picking out the load-bearing nouns" },
+  { title: "SCENE 02 · staging the stack",   blurb: "wiring frontend, backend, storage" },
+  { title: "SCENE 03 · casting the roles",   blurb: "user personas, jobs, boundaries" },
+  { title: "SCENE 04 · scripting user flows", blurb: "signup, main loop, edge cases" },
+  { title: "SCENE 05 · plotting the tests",  blurb: "happy path, edges, negatives" },
+  { title: "SCENE 06 · final cut",           blurb: "trimming, polishing, printing" },
+];
+
+const SYNTH_QUIPS = [
+  "> ideating flows…",
+  "> naming things (hard, this)",
+  "> weighing tradeoffs",
+  "> drafting acceptance criteria",
+  "> considering the failure modes",
+  "> shaping the data model",
+  "> negotiating with the DB gods",
+  "> humming the theme song",
+  "> checking for hidden assumptions",
+  "> stress-testing the happy path",
+  "> the plot thickens",
+  "> reticulating splines",
+  "> aligning the star system",
+  "> asking: what would the user actually type?",
+  "> auditioning route handlers",
+  "> weighing REST vs. RPC",
+  "> murder-boarding the schema",
+  "> teaching the tests to fail first",
+  "> negotiating with future-you",
+  "> making it delightful, not just correct",
+];
+
+function PrdSynthesisTheater({ ideaText, modelLabel }: { ideaText: string; modelLabel: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  const [scene, setScene] = useState(0);
+  const [quips, setQuips] = useState<string[]>([]);
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    // Advance scene every 4s, hold on the last one until the promise resolves
+    // (parent unmounts the theater on success).
+    const id = setInterval(() => {
+      setScene((s) => Math.min(s + 1, SYNTH_SCENES.length - 1));
+    }, 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    // Roll a fresh quip in every ~1.4s. Keeps only the last 5.
+    const push = () => {
+      setQuips((q) => {
+        const next = SYNTH_QUIPS[Math.floor(Math.random() * SYNTH_QUIPS.length)]!;
+        // Avoid two identical quips back-to-back — feels lazy.
+        const tail = q[q.length - 1] === next && SYNTH_QUIPS.length > 1
+          ? SYNTH_QUIPS[(SYNTH_QUIPS.indexOf(next) + 1) % SYNTH_QUIPS.length]!
+          : next;
+        return [...q, tail].slice(-5);
+      });
+    };
+    push();
+    const id = setInterval(push, 1400);
+    return () => clearInterval(id);
+  }, []);
+
+  // Progress: fill toward 95% over ~24s (avg PRD run), hold there.
+  const EXPECTED_MS = 24_000;
+  const progressPct = Math.min(95, (elapsed * 1000 / EXPECTED_MS) * 95);
+  const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  const currentScene = SYNTH_SCENES[scene] ?? SYNTH_SCENES[SYNTH_SCENES.length - 1]!;
+
+  return (
+    <div
+      className="absolute inset-0 z-30 flex flex-col overflow-hidden"
+      style={{ background: "linear-gradient(180deg, #050608 0%, #0a0e14 100%)", padding: 18 }}
+    >
+      {/* Film-strip top border */}
+      <FilmStrip />
+
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 py-4 min-h-0">
+        {/* Marquee: NOW SHOWING */}
+        <div className="flex items-center gap-2" style={{ color: "var(--fg-faded)" }}>
+          <span className="text-[9px] tracking-[0.35em]" style={{ color: "var(--accent)" }}>▲ ▲ ▲</span>
+          <span className="text-[10px] tracking-[0.3em] uppercase">now writing</span>
+          <span className="text-[9px] tracking-[0.35em]" style={{ color: "var(--accent)" }}>▲ ▲ ▲</span>
+        </div>
+        <div className="text-[15px] font-medium text-center px-6" style={{ color: "var(--fg)", letterSpacing: "0.02em" }}>
+          “{truncateIdea(ideaText)}”
+        </div>
+
+        {/* Director's slate */}
+        <div
+          className="w-full max-w-md rounded relative overflow-hidden"
+          style={{
+            background: "var(--bg-panel)",
+            border: "1px solid var(--line)",
+            padding: "12px 14px",
+          }}
+        >
+          {/* Clapper stripes */}
+          <div className="absolute top-0 left-0 right-0 flex" style={{ height: 6 }}>
+            {Array.from({ length: 14 }).map((_, i) => (
+              <div key={i} className="flex-1" style={{ background: i % 2 === 0 ? "var(--fg)" : "var(--bg)" }} />
+            ))}
+          </div>
+          <div className="pt-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between text-[9px] tracking-[0.25em] uppercase" style={{ color: "var(--fg-faded)" }}>
+              <span>take 01</span>
+              <span style={{ color: "var(--accent)" }}>{modelLabel.toUpperCase()}</span>
+              <span className="tabular-nums">⧗ {mmss}</span>
+            </div>
+            <div>
+              <div className="text-[12px] font-medium" style={{ color: "var(--accent)" }}>
+                {currentScene.title}
+              </div>
+              <div className="text-[10.5px] mt-1" style={{ color: "var(--fg-dim)" }}>
+                {currentScene.blurb}
+              </div>
+            </div>
+
+            {/* Scene dots */}
+            <div className="flex items-center gap-1.5">
+              {SYNTH_SCENES.map((_, i) => {
+                const done = i < scene;
+                const active = i === scene;
+                return (
+                  <div
+                    key={i}
+                    className="h-1.5 flex-1 rounded-full transition-all"
+                    style={{
+                      background: done
+                        ? "var(--accent)"
+                        : active
+                          ? "var(--accent)"
+                          : "var(--line)",
+                      opacity: done ? 0.6 : active ? 1 : 0.5,
+                      boxShadow: active ? "0 0 8px var(--accent)" : "none",
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Progress bar */}
+            <div>
+              <div
+                className="w-full h-2 rounded-full overflow-hidden"
+                style={{ background: "var(--bg)", border: "1px solid var(--line)" }}
+              >
+                <div
+                  className="h-full transition-all"
+                  style={{
+                    width: `${progressPct}%`,
+                    background: "linear-gradient(90deg, var(--accent) 0%, var(--green) 100%)",
+                    boxShadow: "0 0 12px var(--accent)",
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-1 text-[9px] tabular-nums" style={{ color: "var(--fg-faded)" }}>
+                <span>rendering scene {scene + 1} / {SYNTH_SCENES.length}</span>
+                <span>{Math.round(progressPct)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Rolling teleprompter */}
+        <div
+          className="w-full max-w-md rounded flex flex-col gap-0.5 min-h-[110px] justify-end"
+          style={{
+            background: "var(--bg)",
+            border: "1px solid var(--line)",
+            padding: "10px 12px",
+            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+            fontSize: 10.5,
+          }}
+        >
+          {quips.map((q, i) => {
+            const isLatest = i === quips.length - 1;
+            return (
+              <div
+                key={`${q}-${i}`}
+                className={isLatest ? "quip-in" : ""}
+                style={{
+                  color: isLatest ? "var(--green)" : "var(--fg-dim)",
+                  opacity: isLatest ? 1 : Math.max(0.35, 0.4 + i * 0.15),
+                }}
+              >
+                {q}
+                {isLatest && <span className="quip-caret">▍</span>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Reels */}
+        <div className="flex items-center gap-4 mt-1" style={{ color: "var(--fg-faded)" }}>
+          <ReelSpinner />
+          <div className="text-[10px] tracking-[0.2em] uppercase">Please stay in your seat</div>
+          <ReelSpinner reverse />
+        </div>
+      </div>
+
+      <FilmStrip />
+
+      {/* Tiny stylesheet for the two animations — scoped to this overlay. */}
+      <style>{`
+        @keyframes at-reel-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+        @keyframes at-reel-spin-rev { from { transform: rotate(0); } to { transform: rotate(-360deg); } }
+        @keyframes at-quip-in { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes at-caret { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+        .quip-in { animation: at-quip-in 260ms ease-out; }
+        .quip-caret { display: inline-block; margin-left: 2px; animation: at-caret 900ms steps(2) infinite; }
+      `}</style>
+    </div>
+  );
+}
+
+function FilmStrip() {
+  return (
+    <div
+      className="flex items-center gap-1.5 shrink-0"
+      style={{ height: 14, padding: "0 4px" }}
+    >
+      {Array.from({ length: 26 }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            width: 22,
+            height: 10,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--line)",
+            borderRadius: 2,
+            opacity: 0.7,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ReelSpinner({ reverse = false }: { reverse?: boolean }) {
+  return (
+    <div
+      style={{
+        width: 22, height: 22, borderRadius: "50%",
+        border: "1.5px solid var(--line)",
+        position: "relative",
+        animation: `${reverse ? "at-reel-spin-rev" : "at-reel-spin"} 2.4s linear infinite`,
+      }}
+    >
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <div
+          key={deg}
+          style={{
+            position: "absolute", top: "50%", left: "50%",
+            width: 3, height: 3, borderRadius: "50%",
+            background: "var(--fg-faded)",
+            transform: `translate(-50%, -50%) rotate(${deg}deg) translateY(-7px)`,
+          }}
+        />
+      ))}
+      <Film
+        size={9}
+        style={{
+          position: "absolute", top: "50%", left: "50%",
+          transform: "translate(-50%, -50%)",
+          color: "var(--accent)",
+        }}
+      />
+    </div>
+  );
+}
+
+function truncateIdea(s: string) {
+  const clean = s.trim().replace(/\s+/g, " ");
+  return clean.length > 90 ? clean.slice(0, 90) + "…" : clean;
 }

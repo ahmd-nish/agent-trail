@@ -9,6 +9,12 @@ import {
   type WizardQuestion,
 } from "../../../core/src/wizard/index.ts";
 import { runIdeaLLM } from "../../../core/src/wizard/runner.ts";
+import type { ModelTier } from "../../../core/src/planner/models.ts";
+
+const VALID_TIERS: ReadonlySet<ModelTier> = new Set(["haiku", "sonnet", "opus"]);
+function parseTier(v: unknown): ModelTier | undefined {
+  return typeof v === "string" && VALID_TIERS.has(v as ModelTier) ? (v as ModelTier) : undefined;
+}
 
 // PRD_OPEN_SOURCE Phase-3+ addendum — "Idea → Guided plan → Test → Build" wizard.
 //
@@ -48,10 +54,11 @@ function rowToIdea(row: IdeaRow) {
 //   → creates an ideas row, calls the LLM for the question set, persists,
 //     and returns the full idea (id + questions + status).
 ideasRouter.post("/ideas/start", async (c) => {
-  const body = await c.req.json<{ idea?: string }>().catch(() => ({}));
+  const body = await c.req.json<{ idea?: string; modelTier?: string }>().catch(() => ({}));
   const idea = (body.idea ?? "").trim();
   if (!idea) return c.json({ error: "idea is required" }, 400);
   if (idea.length > 4000) return c.json({ error: "idea too long — max 4000 chars" }, 400);
+  const tier = parseTier(body.modelTier);
 
   const db = getDb();
   const id = `idea-${crypto.randomUUID()}`;
@@ -64,7 +71,7 @@ ideasRouter.post("/ideas/start", async (c) => {
 
   let questions: WizardQuestion[];
   try {
-    const raw = await runIdeaLLM(buildQuestionsPrompt(idea));
+    const raw = await runIdeaLLM(buildQuestionsPrompt(idea), tier);
     const parsed = parseAndRepairQuestions(raw);
     questions = parsed.questions;
   } catch (err) {
@@ -123,14 +130,14 @@ ideasRouter.post("/ideas/:id/answer", async (c) => {
 //     /api/boards/plan to build the task graph.
 ideasRouter.post("/ideas/:id/synthesize-prd", async (c) => {
   const id = c.req.param("id");
+  const body = await c.req.json<{ modelTier?: string }>().catch(() => ({}));
+  const tier = parseTier(body.modelTier);
   const db = getDb();
   const row = db.query("SELECT * FROM ideas WHERE id = ?").get(id) as IdeaRow | null;
   if (!row) return c.json({ error: "idea not found" }, 404);
 
   const questions = JSON.parse(row.questions) as WizardQuestion[];
   const answers   = JSON.parse(row.answers) as WizardAnswers;
-  // Soft check: every question must have some answer. The UI enforces this
-  // too; here we short-circuit so we don't burn LLM tokens on garbage input.
   const missing = questions.filter((q) => !answers[q.key]);
   if (missing.length > 0) {
     return c.json({ error: `unanswered questions: ${missing.map((q) => q.key).join(", ")}` }, 400);
@@ -138,7 +145,7 @@ ideasRouter.post("/ideas/:id/synthesize-prd", async (c) => {
 
   let prd: string;
   try {
-    prd = (await runIdeaLLM(buildPrdPrompt(row.idea_text, questions, answers))).trim();
+    prd = (await runIdeaLLM(buildPrdPrompt(row.idea_text, questions, answers), tier)).trim();
   } catch (err) {
     return c.json({ error: `PRD synthesis failed: ${err instanceof Error ? err.message : String(err)}` }, 502);
   }
