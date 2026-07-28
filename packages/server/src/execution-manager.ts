@@ -22,6 +22,8 @@ import { resolveLoopPolicy, type PartialLoopPolicy } from "../../core/src/loop/p
 import { buildIterationMemory, renderIterationHistory, type IterationSample } from "../../core/src/loop/iteration.ts";
 import { nextTier } from "../../core/src/planner/models.ts";
 import type { ModelTier } from "../../core/src/types/index.ts";
+import { append as appendKnowledge } from "../../core/src/knowledge/store.ts";
+import { basename } from "node:path";
 
 const MAX_CONCURRENT = 3;
 // User-owned data (DB, worktrees, MCP configs) lives at the project root
@@ -602,6 +604,41 @@ class ExecutionManager {
             );
           } catch (err) {
             console.warn(`[iteration-memory] insert failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+
+          // knowledgelayer §4.1 — same failure, event-log form. Feeds the
+          // multiplayer governance gate (§4.5): "Sarah tried this 3 days ago
+          // and it failed with the same assertion."
+          try {
+            const likelyPaths: string[] = (() => {
+              const raw = (task as unknown as { likely_paths?: string | string[] }).likely_paths;
+              if (Array.isArray(raw)) return raw;
+              if (typeof raw === "string") {
+                try {
+                  const parsed = JSON.parse(raw);
+                  return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === "string") : [];
+                } catch { return []; }
+              }
+              return [];
+            })();
+            appendKnowledge(db, {
+              workspaceId: "local",
+              projectId: basename(REPO_ROOT) || "local",
+              actorKind: "agent",
+              actorId: "claude-code",
+              actorName: "Claude Code",
+              taskId,
+              executionId,
+              type: "failed_attempt",
+              scope: "project",
+              subject: `iter ${nextIter} · ${task.title} · verify_tests failed (exit ${result.exitCode})`,
+              body: iterMem.summary,
+              paths: likelyPaths,
+              confidence: "observed",
+              supersedes: null,
+            });
+          } catch (err) {
+            console.warn(`[knowledge] failed_attempt event failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
 

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Board, Task, TaskStatus, Priority, AgentKind, TddPhase, ReviewKind, Guardrail, PermissionMode, TestCase } from "../../core/src/types/index.ts";
 import { DEFAULT_PERMISSION_MODE, DEFAULT_EXECUTION_TIMEOUT_MS } from "../../core/src/types/index.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
+import { KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES } from "../../core/src/knowledge/schema.ts";
 
 const schemaPath = join(import.meta.dir, "../../core/src/storage/schema.sql");
 
@@ -386,6 +387,18 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
         )
       `);
       db.exec("CREATE INDEX IF NOT EXISTS idx_deploys_board ON deploys(board_id, started_at DESC)");
+    },
+  },
+  {
+    version: 23,
+    description: "knowledgelayer §4.1 — knowledge_events (typed, append-only log)",
+    up: (db) => {
+      // The substrate every other primitive in the shared knowledge layer
+      // is a deterministic fold of. Owned by @agent-trail/core; DDL lives
+      // in packages/core/src/knowledge/schema.ts so the migration and the
+      // in-memory tests share one source of truth.
+      db.exec(KNOWLEDGE_EVENTS_DDL);
+      for (const sql of KNOWLEDGE_EVENTS_INDEXES) db.exec(sql);
     },
   },
 ];

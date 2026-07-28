@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { basename } from "node:path";
 import { getDb } from "../db.ts";
 import { executionManager } from "../execution-manager.ts";
-import { appendDecision } from "../../../core/src/context/store.ts";
+import { appendDecision, detectAuthor } from "../../../core/src/context/store.ts";
 import { resolveProjectRoot } from "../../../core/src/storage/paths.ts";
+import { append as appendKnowledge } from "../../../core/src/knowledge/store.ts";
 
 export const decisionsRouter = new Hono();
 
@@ -53,8 +55,9 @@ decisionsRouter.post("/decisions/:ticketId/answer", async (c) => {
   const taskRow = db
     .query("SELECT title FROM tasks WHERE id = ?")
     .get(ticket.task_id) as { title: string } | null;
+  const root = resolveProjectRoot();
   try {
-    appendDecision(resolveProjectRoot(), {
+    appendDecision(root, {
       taskTitle: taskRow?.title ?? "unknown task",
       question: ticket.question,
       answer: answer.trim(),
@@ -62,6 +65,33 @@ decisionsRouter.post("/decisions/:ticketId/answer", async (c) => {
   } catch (err) {
     console.warn(
       `[decisions] failed to append decisions.md: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // knowledgelayer §4.1 — same decision, event-log form. Deterministic
+  // projections (fold to constitution.md, risk index, retrieval scoring)
+  // consume this instead of parsing markdown.
+  try {
+    const author = detectAuthor(root);
+    appendKnowledge(db, {
+      workspaceId: "local",
+      projectId: basename(root) || "local",
+      actorKind: "human",
+      actorId: author,
+      actorName: author,
+      taskId: ticket.task_id,
+      executionId: ticket.execution_id,
+      type: "decision",
+      scope: "project",
+      subject: `${taskRow?.title ?? "unknown task"} — ${ticket.question.trim().slice(0, 120)}`,
+      body: answer.trim(),
+      paths: [],
+      confidence: "ruling",
+      supersedes: null,
+    });
+  } catch (err) {
+    console.warn(
+      `[decisions] failed to write knowledge event: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
