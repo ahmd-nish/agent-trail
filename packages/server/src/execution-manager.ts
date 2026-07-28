@@ -38,7 +38,6 @@ const ASK_HUMAN_SCRIPT = join(import.meta.dir, "../../core/src/mcp/ask-human.ts"
 interface ExecutionState {
   executionId: string;
   taskId: string;
-  subscribers: ReadableStreamDefaultController<Uint8Array>[];
   // Child handle for the running `claude` CLI. null for verify_tests (which
   // uses runTests directly) and before spawn happens.
   proc: ChildProcess | null;
@@ -62,6 +61,16 @@ class ExecutionManager {
   private taskCompletionListeners = new Map<string, (status: string) => void>();
   private boardRunning = new Set<string>();
   private crashRecoveryDone = false;
+  // knowledgelayer.md §4.6 seed — per-task SSE channels. Lifetime is the
+  // manager, decoupled from ExecutionState. A subscriber that connects
+  // BEFORE an execution starts stays open across the execution boundary;
+  // one that connects mid-execution gets a backfill of recent telemetry
+  // then joins the live tail. Both are required for the doc's Weeks 3-4
+  // "walk in on a running agent" story.
+  private taskChannels = new Map<string, Set<ReadableStreamDefaultController<Uint8Array>>>();
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly KEEPALIVE_MS = 20_000;
+  private static readonly BACKFILL_LIMIT = 200;
 
   get concurrentCount() {
     return this.active.size;
@@ -132,6 +141,11 @@ class ExecutionManager {
   }
 
   // ─── SSE ─────────────────────────────────────────────────────────────────────
+  //
+  // Subscribers live on `taskChannels`, not on `active[taskId].subscribers`.
+  // That's the fix for the pre-execute connect race: subscribers now persist
+  // across execution boundaries, so a teammate who opens the feed of a task
+  // that hasn't started yet stays connected when it does.
 
   subscribe(taskId: string): ReadableStream<Uint8Array> {
     const self = this;
@@ -139,20 +153,34 @@ class ExecutionManager {
     return new ReadableStream<Uint8Array>({
       start(ctrl) {
         _ctrl = ctrl;
+        const chans = self.channelsFor(taskId);
+        chans.add(ctrl);
+
         const state = self.active.get(taskId);
-        if (state) {
-          state.subscribers.push(ctrl);
+        if (state?.executionId) {
           ctrl.enqueue(self.sse({ type: "connected", executionId: state.executionId }));
+          // Mid-execution join → replay recent telemetry so the client
+          // has context before the live tail resumes.
+          self.backfillTelemetry(ctrl, state.executionId);
         } else {
           ctrl.enqueue(self.sse({ type: "idle" }));
-          ctrl.close();
+          // NOTE: do NOT close. The subscriber holds open through the next execute.
         }
+        self.ensureKeepalive();
       },
       cancel() {
-        const state = self.active.get(taskId);
-        if (state) state.subscribers = state.subscribers.filter((s) => s !== _ctrl);
+        const chans = self.taskChannels.get(taskId);
+        if (!chans) return;
+        chans.delete(_ctrl);
+        if (chans.size === 0) self.taskChannels.delete(taskId);
       },
     });
+  }
+
+  private channelsFor(taskId: string): Set<ReadableStreamDefaultController<Uint8Array>> {
+    let chans = this.taskChannels.get(taskId);
+    if (!chans) { chans = new Set(); this.taskChannels.set(taskId, chans); }
+    return chans;
   }
 
   private sse(data: object): Uint8Array {
@@ -160,25 +188,87 @@ class ExecutionManager {
   }
 
   private broadcast(taskId: string, data: object): void {
-    const state = this.active.get(taskId);
-    if (!state) return;
-    const chunk = this.sse(data);
-    for (const ctrl of state.subscribers) {
-      try { ctrl.enqueue(chunk); } catch { /* disconnected */ }
+    const chans = this.taskChannels.get(taskId);
+    if (chans && chans.size > 0) {
+      const chunk = this.sse(data);
+      const dead: ReadableStreamDefaultController<Uint8Array>[] = [];
+      for (const ctrl of chans) {
+        try { ctrl.enqueue(chunk); } catch { dead.push(ctrl); }
+      }
+      for (const d of dead) chans.delete(d);
+      if (chans.size === 0) this.taskChannels.delete(taskId);
     }
     // PRD_OPEN_SOURCE 2.8 — mirror every SSE event to a JSONL file per
     // execution. Cheap append (fs is sync, we log a handful per second)
     // gives us a self-contained recording for later replay / clip export.
-    recordReplayEvent(state.executionId, data);
+    const state = this.active.get(taskId);
+    if (state?.executionId) recordReplayEvent(state.executionId, data);
   }
 
-  private closeAll(taskId: string): void {
-    const state = this.active.get(taskId);
-    if (!state) return;
-    for (const ctrl of state.subscribers) {
-      try { ctrl.close(); } catch { /* already closed */ }
+  // Kept for API compatibility. Subscribers now persist across execution
+  // boundaries so multiplayer teammates see the whole loop, not just the
+  // current spawn. Callers previously used closeAll() to reset the list
+  // after each finalize — with taskChannels-lifetime that reset is wrong.
+  private closeAll(_taskId: string): void { /* intentional no-op — see comment */ }
+
+  private ensureKeepalive(): void {
+    if (this.keepaliveTimer) return;
+    const chunk = this.enc.encode(": keepalive\n\n");
+    this.keepaliveTimer = setInterval(() => {
+      let live = 0;
+      for (const [taskId, chans] of this.taskChannels) {
+        const dead: ReadableStreamDefaultController<Uint8Array>[] = [];
+        for (const ctrl of chans) {
+          try { ctrl.enqueue(chunk); live++; } catch { dead.push(ctrl); }
+        }
+        for (const d of dead) chans.delete(d);
+        if (chans.size === 0) this.taskChannels.delete(taskId);
+      }
+      if (live === 0 && this.keepaliveTimer) {
+        clearInterval(this.keepaliveTimer);
+        this.keepaliveTimer = null;
+      }
+    }, ExecutionManager.KEEPALIVE_MS);
+    // Don't block process shutdown just because we're keepalive-ing.
+    (this.keepaliveTimer as { unref?: () => void }).unref?.();
+  }
+
+  private backfillTelemetry(
+    ctrl: ReadableStreamDefaultController<Uint8Array>,
+    executionId: string,
+  ): void {
+    try {
+      const rows = getDb().query(
+        "SELECT kind, tool_name, tool_input, tool_result, text_content FROM telemetry_events " +
+        "WHERE execution_id = ? ORDER BY seq_num ASC LIMIT ?",
+      ).all(executionId, ExecutionManager.BACKFILL_LIMIT) as Array<{
+        kind: string; tool_name: string | null; tool_input: string | null;
+        tool_result: string | null; text_content: string | null;
+      }>;
+      if (rows.length === 0) return;
+      ctrl.enqueue(this.sse({ type: "backfill_start", count: rows.length, executionId }));
+      for (const r of rows) {
+        if (r.kind === "tool_call") {
+          ctrl.enqueue(this.sse({
+            type: "tool_call",
+            tool: r.tool_name,
+            input: r.tool_input ? safeJson(r.tool_input) : undefined,
+          }));
+        } else if (r.kind === "tool_result") {
+          ctrl.enqueue(this.sse({
+            type: "tool_result",
+            tool: r.tool_name,
+            output: r.tool_result ? safeJson(r.tool_result) : undefined,
+          }));
+        } else if (r.kind === "text") {
+          ctrl.enqueue(this.sse({ type: "text", text: r.text_content ?? "" }));
+        }
+        // 'thinking' / 'error' / 'system' stay internal — they'd confuse clients.
+      }
+      ctrl.enqueue(this.sse({ type: "backfill_end" }));
+    } catch (err) {
+      console.warn(`[sse-backfill] ${err instanceof Error ? err.message : String(err)}`);
     }
-    state.subscribers = [];
   }
 
   // ─── Start ───────────────────────────────────────────────────────────────────
@@ -485,7 +575,6 @@ class ExecutionManager {
     const state: ExecutionState = {
       executionId: "",
       taskId,
-      subscribers: [],
       proc: null,
       cancelled: false,
     };
@@ -1385,6 +1474,10 @@ function toUiEvent(event: StreamEvent): object | null {
     }
   }
   return null;
+}
+
+function safeJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return s; }
 }
 
 export interface BlockerInfo {

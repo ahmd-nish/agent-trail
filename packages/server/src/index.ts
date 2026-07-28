@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, normalize, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, join, normalize, relative, resolve } from "node:path";
 import { boardsRouter } from "./routes/boards.ts";
 import { tasksRouter } from "./routes/tasks.ts";
 import { executionsRouter } from "./routes/executions.ts";
@@ -21,11 +21,14 @@ import { testHistoryRouter } from "./routes/test-history.ts";
 import { devServerRouter } from "./routes/dev-server.ts";
 import { getDb } from "./db.ts";
 import { executionManager } from "./execution-manager.ts";
-import { resolveProjectRoot } from "../../core/src/storage/paths.ts";
+import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
 import { hydrateFromFile, startAutoSync } from "../../core/src/context/sync.ts";
 
 const RUNNER_URL = process.env["AGENT_TRAIL_RUNNER_URL"] ?? process.env["VIBE_BOARD_RUNNER_URL"] ?? "http://localhost:3003";
-const PROJECT_ROOT = resolveProjectRoot();
+// AGENT_TRAIL_PROJECT_ROOT overrides the cwd-derived root. This is the knob
+// that lets sandboxes / demos / tests aim state.json at a specific directory
+// independent of where the server was launched from.
+const PROJECT_ROOT = process.env["AGENT_TRAIL_PROJECT_ROOT"] ?? resolveProjectRoot();
 const RUNNER_ENTRY = join(import.meta.dir, "../../runner/src/index.ts");
 const WEB_DIST_CANDIDATES = [
   join(import.meta.dir, "../../web/dist"),
@@ -154,19 +157,65 @@ ensureRunner();
 // `.agent-trail/state.json` (a teammate cloned the repo and is booting for
 // the first time), then start the auto-writer so future mutations flow back
 // to disk. Both are no-ops when the file doesn't exist / nothing changed.
-try {
-  const hydrated = hydrateFromFile(db, PROJECT_ROOT);
-  if (hydrated && !hydrated.skippedVersion) {
-    console.log(`[state-sync] hydrated ${hydrated.boardsUpserted} board(s), ${hydrated.tasksUpserted} task(s) from state.json`);
-  } else if (hydrated?.skippedVersion) {
-    console.warn("[state-sync] state.json schema version unknown — leaving DB untouched");
+//
+// Isolation contract:
+//   - AGENT_TRAIL_SKIP_HYDRATE=1     → skip hydration entirely
+//   - AGENT_TRAIL_SKIP_AUTOSYNC=1    → skip the write-back tick (already existed)
+//   - Safety net: if AGENT_TRAIL_DB_PATH points *outside* PROJECT_ROOT, refuse
+//     to hydrate/autosync — a sandbox at /tmp/x/db.sqlite must not inherit or
+//     stomp on the real repo's state.json. Warn with a fix-it message.
+const skipHydrate = process.env["AGENT_TRAIL_SKIP_HYDRATE"] === "1";
+const skipAutosync = process.env["AGENT_TRAIL_SKIP_AUTOSYNC"] === "1";
+// If AGENT_TRAIL_PROJECT_ROOT is set the user has explicitly bound the DB
+// to a project, so honor it. Otherwise fall back to the disjoint-paths
+// safety net which catches the naive "AGENT_TRAIL_DB_PATH=/tmp/..." case.
+const projectRootExplicit = process.env["AGENT_TRAIL_PROJECT_ROOT"] !== undefined;
+const stateJsonAllowed = skipHydrate
+  ? false
+  : projectRootExplicit || dbBelongsToProject(PROJECT_ROOT);
+if (skipHydrate) {
+  console.log("[state-sync] AGENT_TRAIL_SKIP_HYDRATE=1 — hydration skipped");
+} else if (!stateJsonAllowed) {
+  console.warn(
+    `[state-sync] SKIPPING hydrate — DB (${process.env["AGENT_TRAIL_DB_PATH"] ?? resolveDbPath(PROJECT_ROOT)}) is not inside ` +
+    `project root (${PROJECT_ROOT}). Set AGENT_TRAIL_PROJECT_ROOT to bind them, or ` +
+    `AGENT_TRAIL_SKIP_HYDRATE=1 to silence this.`,
+  );
+} else {
+  try {
+    const hydrated = hydrateFromFile(db, PROJECT_ROOT);
+    if (hydrated && !hydrated.skippedVersion) {
+      console.log(`[state-sync] hydrated ${hydrated.boardsUpserted} board(s), ${hydrated.tasksUpserted} task(s) from state.json`);
+    } else if (hydrated?.skippedVersion) {
+      console.warn("[state-sync] state.json schema version unknown — leaving DB untouched");
+    }
+  } catch (err) {
+    console.warn(`[state-sync] hydrate failed: ${err instanceof Error ? err.message : String(err)}`);
   }
-} catch (err) {
-  console.warn(`[state-sync] hydrate failed: ${err instanceof Error ? err.message : String(err)}`);
 }
-if (process.env["AGENT_TRAIL_SKIP_AUTOSYNC"] !== "1") {
+if (!skipAutosync && stateJsonAllowed) {
   const intervalMs = Number(process.env["AGENT_TRAIL_AUTOSYNC_MS"] ?? 2000);
   startAutoSync(db, PROJECT_ROOT, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 2000);
+}
+
+// Returns true when the DB the server is writing to sits inside the project
+// root the server is hydrating from. False = disjoint locations; either the
+// caller has explicitly opted into a sandbox (AGENT_TRAIL_DB_PATH set to a
+// scratch dir) or something is misconfigured. Either way, skipping the sync
+// is the safe default — the user can opt back in via AGENT_TRAIL_PROJECT_ROOT.
+function dbBelongsToProject(projectRoot: string): boolean {
+  const explicitDbPath = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
+  if (!explicitDbPath) return true; // implicit default — DB sits under projectRoot by construction
+  try {
+    const dbDir = realpathSync(dirname(resolve(explicitDbPath)));
+    const projDir = realpathSync(resolve(projectRoot));
+    const rel = relative(projDir, dbDir);
+    // If rel starts with ".." or is absolute, dbDir sits outside projDir.
+    return !!rel && !rel.startsWith("..") && !resolve(rel).startsWith("/");
+  } catch {
+    // Missing dirs → be conservative and skip.
+    return false;
+  }
 }
 
 const port = Number(process.env["AGENT_TRAIL_PORT"] ?? process.env["PORT"] ?? 3002);
