@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Database } from "bun:sqlite";
 import { search as searchKnowledge } from "../knowledge/search.ts";
+import { buildRiskIndex, formatRiskWarnings } from "../knowledge/risk.ts";
 import type { EventType, Scope } from "../knowledge/types.ts";
 
 const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
@@ -119,6 +120,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["id"],
       },
     },
+    // knowledgelayer §4.5 — the multiplayer governance gate. Before an agent
+    // edits a set of files, it (or the runtime) can call precheck to surface
+    // prior failed_attempt / gotcha events on those paths, with attribution
+    // across teammates. Deterministic lookup — no model call, no embeddings.
+    {
+      name: "precheck",
+      description: "Before editing files, check for prior team-wide failed attempts / gotchas on those paths. Returns attributed warnings.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          paths: {
+            type: "array",
+            items: { type: "string" },
+            description: "The files this task will touch. Directories accepted; matched by prefix.",
+          },
+          plan: {
+            type: "string",
+            description: "Optional plan text — reserved for future keyword cross-check with prior gotcha bodies.",
+          },
+        },
+        required: ["paths"],
+      },
+    },
   ],
 }));
 
@@ -216,6 +240,19 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const row = db.query("SELECT * FROM knowledge_events WHERE id = ?").get(id);
     if (!row) throw new Error(`knowledge event ${id} not found`);
     return { content: [{ type: "text", text: JSON.stringify(row, null, 2) }] };
+  }
+
+  if (name === "precheck") {
+    const { paths } = args as { paths: string[]; plan?: string };
+    if (!Array.isArray(paths) || paths.length === 0) throw new Error("paths must be a non-empty array");
+    const index = buildRiskIndex(db, paths);
+    return {
+      content: [
+        { type: "text", text: index.totalHits === 0
+            ? "clear — no prior failed attempts or gotchas on these paths"
+            : formatRiskWarnings(index) },
+      ],
+    };
   }
 
   throw new Error(`Unknown tool: ${name}`);

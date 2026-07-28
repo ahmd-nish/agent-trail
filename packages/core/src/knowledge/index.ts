@@ -7,6 +7,8 @@ export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";
 export { search } from "./search.ts";
 export type { SearchHit, SearchOptions } from "./search.ts";
+export { buildRiskIndex, formatRiskWarnings } from "./risk.ts";
+export type { RiskIndex, RiskIndexOptions, RiskWarning } from "./risk.ts";
 export { redact } from "./redact.ts";
 export type { RedactResult } from "./redact.ts";
 export { isUlid, ulid, ulidTime } from "./ulid.ts";
