@@ -1,12 +1,27 @@
 {
   "name": "@agent-trail/core",
-  "version": "0.0.1",
-  "private": true,
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Core primitives for agent-trail: DAG planner, Claude Code adapter, MCP servers, test runner, context store, model router.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
   },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts",
+    "!src/**/__tests__/**",
+    "!src/**/__fixtures__/**"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "jsonpath-plus": "^10.4.0"

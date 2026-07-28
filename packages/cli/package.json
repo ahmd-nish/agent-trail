@@ -1,7 +1,23 @@
 {
   "name": "@agent-trail/cli",
-  "version": "0.0.1",
-  "private": true,
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "agent-trail CLI — the kanban board where your team's AI coding agents share a brain.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
+  "keywords": [
+    "agent-trail",
+    "claude-code",
+    "kanban",
+    "coding-agents",
+    "mcp",
+    "tdd",
+    "multiplayer-ai"
+  ],
   "type": "module",
   "bin": {
     "agent-trail": "./src/index.ts"
@@ -9,9 +25,12 @@
   "files": [
     "src",
     "examples",
-    "agents"
+    "agents",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts"
   ],
   "dependencies": {
-    "@agent-trail/core": "workspace:*"
+    "@agent-trail/core": "workspace:*",
+    "@agent-trail/server": "workspace:*"
   }
 }

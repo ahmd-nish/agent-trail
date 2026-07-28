@@ -12,17 +12,18 @@
     },
     "packages/cli": {
       "name": "@agent-trail/cli",
-      "version": "0.0.1",
+      "version": "1.0.0",
       "bin": {
         "agent-trail": "./src/index.ts",
       },
       "dependencies": {
         "@agent-trail/core": "workspace:*",
+        "@agent-trail/server": "workspace:*",
       },
     },
     "packages/core": {
       "name": "@agent-trail/core",
-      "version": "0.0.1",
+      "version": "1.0.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.0.0",
         "jsonpath-plus": "^10.4.0",
@@ -30,7 +31,7 @@
     },
     "packages/mcp-server": {
       "name": "@agent-trail/mcp-server",
-      "version": "0.0.1",
+      "version": "1.0.0",
       "dependencies": {
         "@agent-trail/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.0.0",
@@ -38,7 +39,7 @@
     },
     "packages/runner": {
       "name": "@agent-trail/runner",
-      "version": "0.1.1",
+      "version": "1.0.0",
       "dependencies": {
         "hono": "^4.0.0",
       },
@@ -49,7 +50,7 @@
     },
     "packages/server": {
       "name": "@agent-trail/server",
-      "version": "0.0.1",
+      "version": "1.0.0",
       "dependencies": {
         "@agent-trail/core": "workspace:*",
         "hono": "^4.12.21",

@@ -1,8 +1,23 @@
 {
   "name": "@agent-trail/mcp-server",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
+  "license": "MIT",
+  "description": "Standalone MCP server exposing the agent-trail board as tools for Claude Code.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
   "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
   "scripts": {
     "dev": "bun --hot src/index.ts"
   },

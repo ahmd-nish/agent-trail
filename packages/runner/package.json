@@ -1,8 +1,22 @@
 {
   "name": "@agent-trail/runner",
-  "version": "0.1.1",
-  "private": true,
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Headless runner service for agent-trail.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "directory": "packages/runner"
+  },
+  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
   "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
   "scripts": {
     "dev": "lsof -ti:3003 | xargs -r kill -9 2>/dev/null; sleep 0.2; bun --watch src/index.ts",
     "start": "bun src/index.ts"
