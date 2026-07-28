@@ -16,7 +16,7 @@ if (!DB_PATH) {
 const db = new Database(DB_PATH);
 
 const server = new Server(
-  { name: "agent-trail", version: "0.2.0" },
+  { name: "agent-trail", version: "1.0.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -77,6 +77,46 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["boardId", "title"],
       },
     },
+    // knowledgelayer §4.3 — read-side of the team-context layer. Any teammate's
+    // Claude Code session with this MCP configured can query the shared event
+    // log. Full hybrid retrieval (BM25 + vector + RRF) lands in Weeks 5-6;
+    // for now this is a LIKE-based search which is honest about its limits.
+    {
+      name: "list_knowledge",
+      description: "List active team-knowledge events. Filter by type/scope to scope the pull.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string", description: "decision | convention | gotcha | failed_attempt | fix | artifact_summary | steer | handoff" },
+          scope: { type: "string", description: "org | project | module:<path> | task:<id>" },
+          limit: { type: "number", description: "default 50; hard cap 500" },
+        },
+      },
+    },
+    {
+      name: "search_knowledge",
+      description: "Search team-knowledge events by keyword across subject and body. Returns active events (excludes superseded).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "keyword or phrase" },
+          type: { type: "string", description: "optional type filter" },
+          limit: { type: "number", description: "default 20; hard cap 200" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "get_knowledge_event",
+      description: "Fetch a single team-knowledge event by ULID.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "the ULID from list_knowledge or search_knowledge" },
+        },
+        required: ["id"],
+      },
+    },
   ],
 }));
 
@@ -126,6 +166,47 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     return {
       content: [{ type: "text", text: JSON.stringify({ id, boardId, title, description, priority, assignee }, null, 2) }],
     };
+  }
+
+  if (name === "list_knowledge") {
+    const { type, scope, limit: rawLimit } = (args ?? {}) as { type?: string; scope?: string; limit?: number };
+    const limit = Math.min(500, Math.max(1, Number(rawLimit ?? 50)));
+    const clauses = ["superseded_by IS NULL"];
+    const params: string[] = [];
+    if (type)  { clauses.push("type = ?");  params.push(type); }
+    if (scope) { clauses.push("scope = ?"); params.push(scope); }
+    const rows = db.query(
+      `SELECT id, actor_kind, actor_name, task_id, execution_id, type, scope, subject, body, paths, confidence, valid_from, created_at
+       FROM knowledge_events WHERE ${clauses.join(" AND ")} ORDER BY id DESC LIMIT ${limit}`,
+    ).all(...params);
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  }
+
+  if (name === "search_knowledge") {
+    const { query, type, limit: rawLimit } = args as { query: string; type?: string; limit?: number };
+    if (!query?.trim()) throw new Error("query is required");
+    const limit = Math.min(200, Math.max(1, Number(rawLimit ?? 20)));
+    // LIKE with `%` around the pattern — deliberate: proper BM25 + vector
+    // retrieval waits for Weeks 5-6, and pretending we have it before we do
+    // is exactly what the doc warns against. Escape backslash + LIKE wildcards.
+    const escaped = query.trim().replace(/[\\%_]/g, (m) => `\\${m}`);
+    const like = `%${escaped}%`;
+    const clauses = ["superseded_by IS NULL", "(subject LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"];
+    const params: string[] = [like, like];
+    if (type) { clauses.push("type = ?"); params.push(type); }
+    const rows = db.query(
+      `SELECT id, actor_kind, actor_name, task_id, type, scope, subject, body, paths, confidence, valid_from
+       FROM knowledge_events WHERE ${clauses.join(" AND ")} ORDER BY id DESC LIMIT ${limit}`,
+    ).all(...params);
+    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+  }
+
+  if (name === "get_knowledge_event") {
+    const { id } = args as { id: string };
+    if (!id) throw new Error("id is required");
+    const row = db.query("SELECT * FROM knowledge_events WHERE id = ?").get(id);
+    if (!row) throw new Error(`knowledge event ${id} not found`);
+    return { content: [{ type: "text", text: JSON.stringify(row, null, 2) }] };
   }
 
   throw new Error(`Unknown tool: ${name}`);
