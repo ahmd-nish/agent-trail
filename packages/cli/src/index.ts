@@ -744,7 +744,10 @@ async function cmdKnowledge(args: string[]) {
   const { Database } = await import("bun:sqlite");
   const {
     append: _append, list, foldConstitution, backfillFromContextDir,
+    exportEventsToJsonl, importEventsFromJsonl,
+    projectAgentsMd, projectConstitutionMd,
     KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES,
+    KNOWLEDGE_EVENTS_FTS, KNOWLEDGE_EVENTS_FTS_TRIGGERS,
   } = await import("../../core/src/knowledge/index.ts");
   void _append; // reserved for future `knowledge add` subcommand
   const root = resolveProjectRoot();
@@ -754,6 +757,11 @@ async function cmdKnowledge(args: string[]) {
   // server has ever started.
   db.exec(KNOWLEDGE_EVENTS_DDL);
   for (const s of KNOWLEDGE_EVENTS_INDEXES) db.exec(s);
+  db.exec(KNOWLEDGE_EVENTS_FTS);
+  for (const s of KNOWLEDGE_EVENTS_FTS_TRIGGERS) db.exec(s);
+
+  const fs = await import("node:fs");
+  const path = await import("node:path");
 
   try {
     switch (sub) {
@@ -785,8 +793,31 @@ async function cmdKnowledge(args: string[]) {
         console.log(c.dim(`— ${folded.totalChars} chars${folded.truncated ? " (truncated)" : ""} across ${folded.sections.length} section(s)`));
         return;
       }
+      case "export": {
+        const outDir = flagValue(args, "--dir") ?? path.join(root, ".agent-trail", "export");
+        const includeSuperseded = args.includes("--include-superseded");
+        fs.mkdirSync(outDir, { recursive: true });
+        const jsonl = exportEventsToJsonl(db, { includeSuperseded });
+        fs.writeFileSync(path.join(outDir, "events.jsonl"), jsonl, "utf8");
+        fs.writeFileSync(path.join(outDir, "AGENTS.md"), projectAgentsMd(db), "utf8");
+        fs.writeFileSync(path.join(outDir, "constitution.md"), projectConstitutionMd(db), "utf8");
+        const n = jsonl ? jsonl.trim().split("\n").length : 0;
+        console.log(`${c.green("✓")} exported ${n} event(s) to ${c.dim(outDir)}`);
+        console.log(`  ${c.dim("events.jsonl")}    ${n} rows`);
+        console.log(`  ${c.dim("AGENTS.md")}       standardized team-guidance file`);
+        console.log(`  ${c.dim("constitution.md")} full constitution projection`);
+        return;
+      }
+      case "import": {
+        const file = args[1] ?? flagValue(args, "--file");
+        if (!file) { console.error(`${c.red("✗")} usage: agent-trail knowledge import <events.jsonl>`); process.exit(2); }
+        const jsonl = fs.readFileSync(file, "utf8");
+        const rpt = importEventsFromJsonl(db, jsonl);
+        console.log(`${c.green("+")} imported ${rpt.inserted} event(s) · ${c.dim(String(rpt.skipped) + " already present or malformed")}`);
+        return;
+      }
       default:
-        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}   Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")}         List active events (--type <t> --limit <n>)\n  ${c.bold("fold")}       Preview the constitution projection (--cap <chars>)`);
+        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)`);
         process.exit(sub ? 1 : 0);
     }
   } finally {

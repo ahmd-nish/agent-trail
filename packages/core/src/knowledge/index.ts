@@ -9,6 +9,13 @@ export { search } from "./search.ts";
 export type { SearchHit, SearchOptions } from "./search.ts";
 export { buildRiskIndex, formatRiskWarnings } from "./risk.ts";
 export type { RiskIndex, RiskIndexOptions, RiskWarning } from "./risk.ts";
+export {
+  exportEventsToJsonl,
+  importEventsFromJsonl,
+  projectAgentsMd,
+  projectConstitutionMd,
+} from "./export.ts";
+export type { ExportOptions } from "./export.ts";
 export { redact } from "./redact.ts";
 export type { RedactResult } from "./redact.ts";
 export { isUlid, ulid, ulidTime } from "./ulid.ts";
