@@ -6,6 +6,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Database } from "bun:sqlite";
+import { search as searchKnowledge } from "../knowledge/search.ts";
+import type { EventType, Scope } from "../knowledge/types.ts";
 
 const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
 if (!DB_PATH) {
@@ -183,22 +185,29 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 
   if (name === "search_knowledge") {
-    const { query, type, limit: rawLimit } = args as { query: string; type?: string; limit?: number };
+    const { query, type, scope, limit: rawLimit } = args as { query: string; type?: string; scope?: string; limit?: number };
     if (!query?.trim()) throw new Error("query is required");
     const limit = Math.min(200, Math.max(1, Number(rawLimit ?? 20)));
-    // LIKE with `%` around the pattern — deliberate: proper BM25 + vector
-    // retrieval waits for Weeks 5-6, and pretending we have it before we do
-    // is exactly what the doc warns against. Escape backslash + LIKE wildcards.
-    const escaped = query.trim().replace(/[\\%_]/g, (m) => `\\${m}`);
-    const like = `%${escaped}%`;
-    const clauses = ["superseded_by IS NULL", "(subject LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"];
-    const params: string[] = [like, like];
-    if (type) { clauses.push("type = ?"); params.push(type); }
-    const rows = db.query(
-      `SELECT id, actor_kind, actor_name, task_id, type, scope, subject, body, paths, confidence, valid_from
-       FROM knowledge_events WHERE ${clauses.join(" AND ")} ORDER BY id DESC LIMIT ${limit}`,
-    ).all(...params);
-    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    // knowledgelayer §4.3 — FTS5 BM25 with confidence-tier scoring.
+    // Vector kNN + RRF fusion is deferred (needs the embedding pipeline);
+    // this is the BM25 half of the "seed" step.
+    const hits = searchKnowledge(db, query, {
+      type: type as EventType | undefined,
+      scope: scope as Scope | undefined,
+      limit,
+    });
+    const compact = hits.map((h) => ({
+      id: h.event.id,
+      score: h.score,
+      type: h.event.type,
+      scope: h.event.scope,
+      subject: h.event.subject,
+      body: h.event.body,
+      actor: h.event.actorName,
+      valid_from: h.event.validFrom,
+      confidence: h.event.confidence,
+    }));
+    return { content: [{ type: "text", text: JSON.stringify(compact, null, 2) }] };
   }
 
   if (name === "get_knowledge_event") {

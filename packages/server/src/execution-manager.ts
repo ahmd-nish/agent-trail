@@ -15,6 +15,7 @@ import { DEFAULT_PERMISSION_MODE } from "../../core/src/types/index.ts";
 import type { StreamEvent } from "../../core/src/types/stream-json.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
 import { loadConstitution } from "../../core/src/context/store.ts";
+import { foldConstitution } from "../../core/src/knowledge/fold.ts";
 import { buildHeuristicMemory, buildL1Pack, writeTaskMemory } from "../../core/src/context/memory.ts";
 import { rankRelevantFiles } from "../../core/src/context/repo-map.ts";
 import { detectThrash, type ExecutionSample } from "../../core/src/loop/thrash.ts";
@@ -944,7 +945,23 @@ class ExecutionManager {
     // PRD 3.4 — L0 constitution loaded per-execution so mid-run edits to
     // CLAUDE.md / .agent-trail/context/*.md land in the next task without a
     // server restart. Cap enforced inside loadConstitution.
-    const constitutionText = loadConstitution(REPO_ROOT).content;
+    //
+    // knowledgelayer §4.4 seed — augment the file-based constitution with a
+    // fold of the event log. Two sources live side-by-side during the
+    // transition: users who haven't run `agent-trail knowledge backfill`
+    // still get their file-based context; the fold contributes fresh
+    // decisions/conventions/gotchas emitted during agent runs. Kept to
+    // 2000 chars so it doesn't crowd out the file-based half; a proper
+    // three-band prompt with cache breakpoints (§4.4) supersedes both.
+    const fileConstitution = loadConstitution(REPO_ROOT).content;
+    let foldedText = "";
+    try {
+      foldedText = foldConstitution(db, { charCap: 2000 }).markdown;
+    } catch (err) {
+      // FTS/event table absent (fresh install pre-migration) — degrade to file only.
+      console.warn(`[knowledge] fold failed, using file-only constitution: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const constitutionText = [fileConstitution, foldedText].filter(Boolean).join("\n\n=== team knowledge (event log) ===\n\n");
 
     // PRD 4.4 — per-task L1 pack. Adds the task's own scope + a
     // short summary of every DAG dependency's memory (if written), plus

@@ -41,3 +41,35 @@ export const KNOWLEDGE_EVENTS_INDEXES = [
   // scope filters — module:<path> and task:<id> lookups.
   "CREATE INDEX IF NOT EXISTS idx_ke_scope ON knowledge_events(scope)",
 ];
+
+// §4.3 seed — FTS5 virtual table + triggers for the "BM25 half" of hybrid
+// retrieval. Vector kNN + RRF fusion lands in a follow-up when the
+// embedding pipeline (nomic-embed-text 256d Matryoshka) is in place;
+// until then FTS5 alone is dramatically better than LIKE, and it's
+// available with zero extra dependencies on bun:sqlite.
+export const KNOWLEDGE_EVENTS_FTS = `
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_events_fts USING fts5(
+  subject,
+  body,
+  content='knowledge_events',
+  content_rowid='rowid',
+  tokenize='porter unicode61 remove_diacritics 2'
+);
+`;
+
+export const KNOWLEDGE_EVENTS_FTS_TRIGGERS = [
+  // Keep the FTS index in sync with the underlying table. append-only writes
+  // in the store.ts path guarantee INSERT is the primary case; DELETE is used
+  // by nothing today but the trigger exists so future compaction is safe.
+  `CREATE TRIGGER IF NOT EXISTS ke_fts_ai AFTER INSERT ON knowledge_events BEGIN
+     INSERT INTO knowledge_events_fts(rowid, subject, body) VALUES (new.rowid, new.subject, new.body);
+   END;`,
+  `CREATE TRIGGER IF NOT EXISTS ke_fts_ad AFTER DELETE ON knowledge_events BEGIN
+     INSERT INTO knowledge_events_fts(knowledge_events_fts, rowid, subject, body) VALUES('delete', old.rowid, old.subject, old.body);
+   END;`,
+  `CREATE TRIGGER IF NOT EXISTS ke_fts_au AFTER UPDATE ON knowledge_events BEGIN
+     INSERT INTO knowledge_events_fts(knowledge_events_fts, rowid, subject, body) VALUES('delete', old.rowid, old.subject, old.body);
+     INSERT INTO knowledge_events_fts(rowid, subject, body) VALUES (new.rowid, new.subject, new.body);
+   END;`,
+];
+

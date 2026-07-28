@@ -4,7 +4,12 @@ import { join } from "node:path";
 import type { Board, Task, TaskStatus, Priority, AgentKind, TddPhase, ReviewKind, Guardrail, PermissionMode, TestCase } from "../../core/src/types/index.ts";
 import { DEFAULT_PERMISSION_MODE, DEFAULT_EXECUTION_TIMEOUT_MS } from "../../core/src/types/index.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
-import { KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES } from "../../core/src/knowledge/schema.ts";
+import {
+  KNOWLEDGE_EVENTS_DDL,
+  KNOWLEDGE_EVENTS_FTS,
+  KNOWLEDGE_EVENTS_FTS_TRIGGERS,
+  KNOWLEDGE_EVENTS_INDEXES,
+} from "../../core/src/knowledge/schema.ts";
 
 const schemaPath = join(import.meta.dir, "../../core/src/storage/schema.sql");
 
@@ -399,6 +404,16 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
       // in-memory tests share one source of truth.
       db.exec(KNOWLEDGE_EVENTS_DDL);
       for (const sql of KNOWLEDGE_EVENTS_INDEXES) db.exec(sql);
+    },
+  },
+  {
+    version: 24,
+    description: "knowledgelayer §4.3 seed — FTS5 virtual index over knowledge_events (BM25 half of hybrid retrieval)",
+    up: (db) => {
+      db.exec(KNOWLEDGE_EVENTS_FTS);
+      for (const sql of KNOWLEDGE_EVENTS_FTS_TRIGGERS) db.exec(sql);
+      // Backfill the index from any rows that pre-date this migration.
+      db.exec("INSERT INTO knowledge_events_fts(rowid, subject, body) SELECT rowid, subject, body FROM knowledge_events");
     },
   },
 ];
