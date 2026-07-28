@@ -80,6 +80,9 @@ switch (cmd) {
   case "deploy":
     await cmdDeploy(rest);
     break;
+  case "knowledge":
+    await cmdKnowledge(rest);
+    break;
   default:
     printHelp();
     process.exit(rawCmd ? 1 : 0);
@@ -433,6 +436,7 @@ ${c.dim("Commands:")}
   ${c.bold("loop")} --board <id> [--budget $N] Run the whole board DAG until done / budget / decision ticket
   ${c.bold("library")} add|new|ls|rm            Manage the team agent library (.agent-trail/library/agents/)
   ${c.bold("deploy")} --board <id> --target <n> Deploy a board via a configured target (human-gated by default)
+  ${c.bold("knowledge")} backfill|ls|fold      Shared team knowledge log (docs/knowledgelayer.md)
   ${c.bold("status")}                          Show all boards and task counts
   ${c.bold("doctor")}                          Preflight checks (claude, git, ports, API key)
 
@@ -729,6 +733,65 @@ async function cmdDeploy(args: string[]) {
   }
   console.error(`${c.red("✗")} timed out after ${timeoutSec}s`);
   process.exit(124);
+}
+
+// knowledgelayer.md §4.1–§4.2 — knowledge event log CLI.
+//   agent-trail knowledge backfill    Sweep existing .agent-trail/context/*.md into events
+//   agent-trail knowledge ls [--type <t>] [--limit <n>]   List active events
+//   agent-trail knowledge fold [--cap <chars>]            Preview the constitution projection
+async function cmdKnowledge(args: string[]) {
+  const sub = args[0];
+  const { Database } = await import("bun:sqlite");
+  const {
+    append: _append, list, foldConstitution, backfillFromContextDir,
+    KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES,
+  } = await import("../../core/src/knowledge/index.ts");
+  void _append; // reserved for future `knowledge add` subcommand
+  const root = resolveProjectRoot();
+  const db = new Database(resolveDbPath(root));
+  // Fresh installs pre-migration might not have the table yet — apply the DDL
+  // idempotently so `bunx @agent-trail/cli knowledge …` works before the
+  // server has ever started.
+  db.exec(KNOWLEDGE_EVENTS_DDL);
+  for (const s of KNOWLEDGE_EVENTS_INDEXES) db.exec(s);
+
+  try {
+    switch (sub) {
+      case "backfill": {
+        const rpt = backfillFromContextDir(db, root);
+        console.log(`${c.bold("Backfill from")} ${c.dim(root + "/.agent-trail/context/")}`);
+        for (const f of rpt.filesRead) console.log(`  ${c.dim("read")} ${f}`);
+        console.log(`  ${c.green("+")} ${rpt.decisionsInserted} decisions · ${c.dim(String(rpt.decisionsSkipped) + " already present")}`);
+        console.log(`  ${c.green("+")} ${rpt.notesInserted} conventions · ${c.dim(String(rpt.notesSkipped) + " already present")}`);
+        return;
+      }
+      case "ls": {
+        const typeArg = flagValue(args, "--type");
+        const limit = Number(flagValue(args, "--limit") ?? 50);
+        const events = list(db, { type: typeArg as ReturnType<typeof list>[number]["type"] | undefined, limit });
+        if (events.length === 0) { console.log(c.dim("(no events)")); return; }
+        for (const ev of events) {
+          const t = ev.validFrom.slice(0, 10);
+          console.log(`${c.dim(t)} ${c.bold(ev.type.padEnd(18))} ${c.dim(ev.actorName)}  ${ev.subject}`);
+        }
+        return;
+      }
+      case "fold": {
+        const cap = Number(flagValue(args, "--cap") ?? 8000);
+        const folded = foldConstitution(db, { charCap: cap });
+        if (!folded.markdown) { console.log(c.dim("(no active events — try `knowledge backfill` first)")); return; }
+        console.log(folded.markdown);
+        console.log("");
+        console.log(c.dim(`— ${folded.totalChars} chars${folded.truncated ? " (truncated)" : ""} across ${folded.sections.length} section(s)`));
+        return;
+      }
+      default:
+        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}   Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")}         List active events (--type <t> --limit <n>)\n  ${c.bold("fold")}       Preview the constitution projection (--cap <chars>)`);
+        process.exit(sub ? 1 : 0);
+    }
+  } finally {
+    db.close();
+  }
 }
 
 // PRD_OPEN_SOURCE §4.1/§4.2 — team library CLI.

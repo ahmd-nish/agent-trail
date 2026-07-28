@@ -1,5 +1,9 @@
 import { Hono } from "hono";
+import { basename } from "node:path";
 import { getDb } from "../db.ts";
+import { append as appendKnowledge } from "../../../core/src/knowledge/store.ts";
+import { detectAuthor } from "../../../core/src/context/store.ts";
+import { resolveProjectRoot } from "../../../core/src/storage/paths.ts";
 
 // PRD_OPEN_SOURCE §4.4b — steering queue.
 //
@@ -51,6 +55,32 @@ steeringRouter.post("/tasks/:taskId/steer", async (c) => {
     "INSERT INTO steering (id, task_id, kind, text, created_at) VALUES (?, ?, ?, ?, ?)",
   ).run(id, taskId, kind, body.text.trim(), now);
   const row = db.query("SELECT * FROM steering WHERE id = ?").get(id) as SteerRow;
+
+  // knowledgelayer §4.1 — steer becomes an attributed event so the multiplayer
+  // future ("Sarah redirected this agent yesterday") has a substrate.
+  try {
+    const root = resolveProjectRoot();
+    const author = detectAuthor(root);
+    appendKnowledge(db, {
+      workspaceId: "local",
+      projectId: basename(root) || "local",
+      actorKind: "human",
+      actorId: author,
+      actorName: author,
+      taskId,
+      executionId: null,
+      type: "steer",
+      scope: `task:${taskId}`,
+      subject: `steer (${kind}) on task ${taskId.slice(0, 8)}`,
+      body: body.text.trim(),
+      paths: [],
+      confidence: "ruling",
+      supersedes: null,
+    });
+  } catch (err) {
+    console.warn(`[steering] knowledge event failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   return c.json(rowToSteer(row), 201);
 });
 

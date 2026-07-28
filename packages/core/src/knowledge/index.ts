@@ -1,6 +1,8 @@
 // Barrel export for the knowledge module (doc §4.1–§4.2).
 export { append, count, getById, hashEvent, list } from "./store.ts";
 export type { AppendOptions, AppendResult, ListFilter } from "./store.ts";
+export { backfillFromContextDir } from "./backfill.ts";
+export type { BackfillReport } from "./backfill.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";
 export { redact } from "./redact.ts";

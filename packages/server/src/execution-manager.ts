@@ -250,6 +250,34 @@ class ExecutionManager {
         completedAt,
       });
       writeTaskMemory(REPO_ROOT, memory);
+
+      // knowledgelayer §4.1 — same artifact, event-log form. This is the
+      // seed for §4.2b capability-contracts (Weeks 1-2 continued): the
+      // downstream tree-sitter pass extracts exports/routes/tables/env
+      // from the paths listed here, so a consumer never re-scans them.
+      try {
+        appendKnowledge(db, {
+          workspaceId: "local",
+          projectId: basename(REPO_ROOT) || "local",
+          actorKind: "agent",
+          actorId: "claude-code",
+          actorName: "Claude Code",
+          taskId,
+          executionId: null,
+          type: "artifact_summary",
+          scope: `task:${taskId}`,
+          subject: `completed · ${task.title}`,
+          body: [
+            memory.summary ? memory.summary.trim() : "",
+            fileList.length ? `Modified: ${fileList.slice(0, 12).join(", ")}${fileList.length > 12 ? "…" : ""}` : "",
+          ].filter(Boolean).join("\n"),
+          paths: fileList,
+          confidence: "observed",
+          supersedes: null,
+        });
+      } catch (err) {
+        console.warn(`[knowledge] artifact_summary event failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     } catch (err) {
       console.warn(`[task-memory] failed to persist memory for ${taskId}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -695,6 +723,28 @@ class ExecutionManager {
               });
             } catch (err) {
               console.warn(`[thrash] failed to insert ticket: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            // knowledgelayer §4.5 governance-gate substrate — thrash becomes a
+            // durable gotcha visible to future runs across all teammates.
+            try {
+              appendKnowledge(db, {
+                workspaceId: "local",
+                projectId: basename(REPO_ROOT) || "local",
+                actorKind: "agent",
+                actorId: "thrash-detector",
+                actorName: "agent-trail",
+                taskId,
+                executionId,
+                type: "gotcha",
+                scope: "project",
+                subject: `thrash on ${task.title} · ${verdict.signal}`,
+                body: [verdict.reason, ...(verdict.history ?? [])].filter(Boolean).join("\n"),
+                paths: [],
+                confidence: "observed",
+                supersedes: null,
+              });
+            } catch (err) {
+              console.warn(`[knowledge] thrash gotcha event failed: ${err instanceof Error ? err.message : String(err)}`);
             }
             // Skip §4.5 auto-escalation this time; land blocked as usual.
             db.query(
