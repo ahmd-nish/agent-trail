@@ -204,8 +204,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const rows = db.query(
       `SELECT id, actor_kind, actor_name, task_id, execution_id, type, scope, subject, body, paths, confidence, valid_from, created_at
        FROM knowledge_events WHERE ${clauses.join(" AND ")} ORDER BY id DESC LIMIT ${limit}`,
-    ).all(...params);
-    return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    ).all(...params) as Array<{ paths: string } & Record<string, unknown>>;
+    // Parse `paths` from the raw JSON column so MCP consumers don't have to.
+    return { content: [{ type: "text", text: JSON.stringify(rows.map(hydrateEventRow), null, 2) }] };
   }
 
   if (name === "search_knowledge") {
@@ -237,9 +238,10 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (name === "get_knowledge_event") {
     const { id } = args as { id: string };
     if (!id) throw new Error("id is required");
-    const row = db.query("SELECT * FROM knowledge_events WHERE id = ?").get(id);
+    const row = db.query("SELECT * FROM knowledge_events WHERE id = ?").get(id) as
+      ({ paths: string } & Record<string, unknown>) | null;
     if (!row) throw new Error(`knowledge event ${id} not found`);
-    return { content: [{ type: "text", text: JSON.stringify(row, null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(hydrateEventRow(row), null, 2) }] };
   }
 
   if (name === "precheck") {
@@ -257,6 +259,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   throw new Error(`Unknown tool: ${name}`);
 });
+
+// Parse the raw `paths` TEXT column into a string[] so MCP consumers get
+// the shape the rest of the codebase uses. Non-JSON or non-array values
+// degrade to [] rather than surfacing junk into the model's context.
+function hydrateEventRow<T extends { paths: string }>(row: T): Omit<T, "paths"> & { paths: string[] } {
+  let parsed: string[] = [];
+  try {
+    const v = JSON.parse(row.paths);
+    if (Array.isArray(v)) parsed = v.filter((x): x is string => typeof x === "string");
+  } catch { /* keep [] */ }
+  return { ...row, paths: parsed };
+}
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

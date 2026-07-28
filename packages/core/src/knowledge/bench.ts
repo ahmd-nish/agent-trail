@@ -70,20 +70,25 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
   const since = opts.since ?? isoDaysAgo(30);
   const now = new Date().toISOString();
 
-  const taskRows = db.query(
+  // Bench must work against an event-log-only DB (fresh install, or an
+  // export/import destination). Guard every non-knowledge table read.
+  const has = (name: string): boolean =>
+    !!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+
+  const taskRows = has("tasks") ? db.query(
     `SELECT id, status, created_at FROM tasks WHERE created_at >= ?`,
-  ).all(since) as Array<{ id: string; status: string; created_at: string }>;
+  ).all(since) as Array<{ id: string; status: string; created_at: string }> : [];
   const totalTasks = taskRows.length;
   const completedTasks = taskRows.filter((r) => r.status === "done" || r.status === "in_review").length;
   const failedTasks = taskRows.filter((r) => r.status === "failed" || r.status === "blocked").length;
 
-  const execRows = db.query(
+  const execRows = has("executions") ? db.query(
     `SELECT total_input_tokens, total_output_tokens, duration_ms, status, task_id, started_at
      FROM executions WHERE started_at >= ?`,
   ).all(since) as Array<{
     total_input_tokens: number | null; total_output_tokens: number | null;
     duration_ms: number | null; status: string; task_id: string; started_at: string;
-  }>;
+  }> : [];
   const totalInput = execRows.reduce((a, r) => a + (r.total_input_tokens ?? 0), 0);
   const totalOutput = execRows.reduce((a, r) => a + (r.total_output_tokens ?? 0), 0);
   const withDuration = execRows.filter((r) => (r.duration_ms ?? 0) > 0);
@@ -119,10 +124,10 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
   const thrashOccurrences = thrashRows.n;
 
   // Iteration memories — average iterations for failed tasks.
-  const iterRows = db.query(
+  const iterRows = has("iteration_memories") ? db.query(
     `SELECT task_id, COUNT(*) AS n FROM iteration_memories
      WHERE created_at >= ? GROUP BY task_id`,
-  ).all(since) as Array<{ task_id: string; n: number }>;
+  ).all(since) as Array<{ task_id: string; n: number }> : [];
   const iterationsAvg = iterRows.length === 0 ? 0
     : iterRows.reduce((a, r) => a + r.n, 0) / iterRows.length;
 
@@ -148,9 +153,9 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
   // failed_attempt/gotcha event in the log. A lower bound on how often
   // the governance gate would have had something to say.
   let riskCovered = 0;
-  const tasksWithPaths = db.query(
+  const tasksWithPaths = has("tasks") ? db.query(
     `SELECT id, likely_paths FROM tasks WHERE created_at >= ? AND likely_paths != '[]'`,
-  ).all(since) as Array<{ id: string; likely_paths: string }>;
+  ).all(since) as Array<{ id: string; likely_paths: string }> : [];
   const riskEventRows = db.query(
     `SELECT paths, scope FROM knowledge_events
      WHERE type IN ('failed_attempt','gotcha') AND superseded_by IS NULL AND valid_from >= ?`,

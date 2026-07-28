@@ -59,6 +59,21 @@ describe("buildRiskIndex()", () => {
     expect(idx.perPath["packages/core/auth"]?.count).toBe(2);
   });
 
+  test("trailing-slash target still matches events on files below it", () => {
+    // Regression: verify surfaced that "packages/core/auth/" (with trailing
+    // slash) returned clear when it should have warned. pathMatches now
+    // normalizes trailing slashes on both sides before comparing.
+    const db = freshDb();
+    append(db, ev({ paths: ["packages/core/auth/session.ts"], subject: "session fail" }));
+    const idxTrailing = buildRiskIndex(db, ["packages/core/auth/"]);
+    expect(idxTrailing.perPath["packages/core/auth/"]?.count).toBe(1);
+    // and the reverse — a stored path with a stray trailing slash matches a bare target.
+    const db2 = freshDb();
+    append(db2, ev({ paths: ["packages/core/auth/"], subject: "dir-scoped fail" }));
+    const idxBare = buildRiskIndex(db2, ["packages/core/auth"]);
+    expect(idxBare.perPath["packages/core/auth"]?.count).toBe(1);
+  });
+
   test("scope=module:<path> matches even when paths[] is empty", () => {
     const db = freshDb();
     // A gotcha scoped to a directory but with no explicit paths — should still hit.

@@ -107,14 +107,25 @@ export function formatRiskWarnings(index: RiskIndex): string {
 }
 
 function pathMatches(target: string, eventPaths: string[], scope: string): boolean {
+  // Normalize trailing slashes on both sides — a caller passing
+  // "packages/core/auth/" is asking the same question as "packages/core/auth".
+  // Without this, `${target}/` produces a double slash that never matches.
+  const t = trimTrailingSlash(target);
   // Direct path membership in the event's paths array.
-  if (eventPaths.some((p) => p === target || target.startsWith(`${p}/`) || p.startsWith(`${target}/`))) return true;
+  if (eventPaths.some((raw) => {
+    const p = trimTrailingSlash(raw);
+    return p === t || t.startsWith(`${p}/`) || p.startsWith(`${t}/`);
+  })) return true;
   // Or the scope points at this path (module:packages/core → matches packages/core/**).
   if (scope.startsWith("module:")) {
-    const module = scope.slice("module:".length);
-    if (target === module || target.startsWith(`${module}/`) || module.startsWith(`${target}/`)) return true;
+    const module = trimTrailingSlash(scope.slice("module:".length));
+    if (t === module || t.startsWith(`${module}/`) || module.startsWith(`${t}/`)) return true;
   }
   return false;
+}
+
+function trimTrailingSlash(p: string): string {
+  return p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
 }
 
 function safeParsePaths(s: string): string[] {
