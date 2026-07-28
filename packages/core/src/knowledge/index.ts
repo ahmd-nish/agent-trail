@@ -16,6 +16,8 @@ export {
   projectConstitutionMd,
 } from "./export.ts";
 export type { ExportOptions } from "./export.ts";
+export { runBench } from "./bench.ts";
+export type { BenchOptions, BenchReport } from "./bench.ts";
 export { redact } from "./redact.ts";
 export type { RedactResult } from "./redact.ts";
 export { isUlid, ulid, ulidTime } from "./ulid.ts";

@@ -1,0 +1,223 @@
+import type { Database } from "bun:sqlite";
+import { list } from "./store.ts";
+
+// §5.3 — "the benchmark: your best marketing asset."
+//
+// projectmem's own paper flags the missing category-wide benchmark as
+// its single most-valuable next result. This is our first pass: not a
+// controlled A/B against a naive baseline (that needs a seeded corpus,
+// deferred), but a live-repo report over the telemetry the tool has
+// already been collecting since v1.0.
+//
+// The metrics reported here are the ones the doc calls out as headline:
+//   - tokens/task                     (avg input + output per execution)
+//   - discovery-cost proxy            (avg exploratory tool count is TBD;
+//                                      reported as "unknown" until the
+//                                      telemetry_events surface exposes it)
+//   - repeat-failure prevention rate  (fraction of tasks where the risk
+//                                      index would have warned at spawn
+//                                      time — a lower-bound on gate value)
+//   - context-reuse rate              (% of knowledge events consumed by
+//                                      a task attributed to a different
+//                                      actor — the multiplayer metric)
+//   - time-to-first-green             (avg duration to first passing
+//                                      verify_tests per task)
+//   - iteration density               (avg iteration_memories per failed task)
+//   - knowledge stock                 (event count by type)
+
+export interface BenchReport {
+  windowStart: string;
+  windowEnd: string;
+  tasks: {
+    total: number;
+    completed: number;
+    failed: number;
+    completionRate: number;
+  };
+  tokens: {
+    totalInput: number;
+    totalOutput: number;
+    avgInputPerExecution: number;
+    avgOutputPerExecution: number;
+  };
+  timing: {
+    avgDurationMs: number;
+    avgTimeToFirstGreenMs: number | null;
+  };
+  loop: {
+    executions: number;
+    verifyPassRate: number;
+    thrashOccurrences: number;
+    avgIterationsPerFailedTask: number;
+  };
+  knowledge: {
+    byType: Record<string, number>;
+    totalActive: number;
+    contextReuseRate: number;
+    riskCoverage: number;
+  };
+  notes: string[];
+}
+
+export interface BenchOptions {
+  workspaceId?: string;
+  projectId?: string;
+  /** Only consider events / tasks strictly newer than this ISO date. */
+  since?: string;
+}
+
+export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
+  const since = opts.since ?? isoDaysAgo(30);
+  const now = new Date().toISOString();
+
+  const taskRows = db.query(
+    `SELECT id, status, created_at FROM tasks WHERE created_at >= ?`,
+  ).all(since) as Array<{ id: string; status: string; created_at: string }>;
+  const totalTasks = taskRows.length;
+  const completedTasks = taskRows.filter((r) => r.status === "done" || r.status === "in_review").length;
+  const failedTasks = taskRows.filter((r) => r.status === "failed" || r.status === "blocked").length;
+
+  const execRows = db.query(
+    `SELECT total_input_tokens, total_output_tokens, duration_ms, status, task_id, started_at
+     FROM executions WHERE started_at >= ?`,
+  ).all(since) as Array<{
+    total_input_tokens: number | null; total_output_tokens: number | null;
+    duration_ms: number | null; status: string; task_id: string; started_at: string;
+  }>;
+  const totalInput = execRows.reduce((a, r) => a + (r.total_input_tokens ?? 0), 0);
+  const totalOutput = execRows.reduce((a, r) => a + (r.total_output_tokens ?? 0), 0);
+  const withDuration = execRows.filter((r) => (r.duration_ms ?? 0) > 0);
+
+  const executions = execRows.length;
+  const completedExecs = execRows.filter((r) => r.status === "completed").length;
+  const verifyPassRate = executions === 0 ? 0 : completedExecs / executions;
+
+  // time to first green — for tasks that completed, earliest completed exec's duration.
+  const firstGreens: number[] = [];
+  const perTask = new Map<string, typeof execRows>();
+  for (const r of execRows) {
+    const arr = perTask.get(r.task_id) ?? [];
+    arr.push(r);
+    perTask.set(r.task_id, arr);
+  }
+  for (const [_taskId, execs] of perTask) {
+    void _taskId;
+    execs.sort((a, b) => a.started_at.localeCompare(b.started_at));
+    const greenIdx = execs.findIndex((e) => e.status === "completed");
+    if (greenIdx >= 0) {
+      // Duration = sum of all executions up to and including the first green.
+      const total = execs.slice(0, greenIdx + 1).reduce((a, e) => a + (e.duration_ms ?? 0), 0);
+      if (total > 0) firstGreens.push(total);
+    }
+  }
+
+  // Thrash count = count of gotcha events whose subject starts with "thrash".
+  const thrashRows = db.query(
+    `SELECT COUNT(*) AS n FROM knowledge_events
+     WHERE type = 'gotcha' AND subject LIKE 'thrash%' AND valid_from >= ?`,
+  ).get(since) as { n: number };
+  const thrashOccurrences = thrashRows.n;
+
+  // Iteration memories — average iterations for failed tasks.
+  const iterRows = db.query(
+    `SELECT task_id, COUNT(*) AS n FROM iteration_memories
+     WHERE created_at >= ? GROUP BY task_id`,
+  ).all(since) as Array<{ task_id: string; n: number }>;
+  const iterationsAvg = iterRows.length === 0 ? 0
+    : iterRows.reduce((a, r) => a + r.n, 0) / iterRows.length;
+
+  // Knowledge stock.
+  const typeRows = db.query(
+    `SELECT type, COUNT(*) AS n FROM knowledge_events
+     WHERE superseded_by IS NULL AND valid_from >= ?
+     GROUP BY type`,
+  ).all(since) as Array<{ type: string; n: number }>;
+  const byType: Record<string, number> = {};
+  for (const r of typeRows) byType[r.type] = r.n;
+  const totalActive = Object.values(byType).reduce((a, b) => a + b, 0);
+
+  // Context reuse rate — the multiplayer metric.
+  //   fraction of active knowledge events whose actor differs from the
+  //   git user.name that ran this bench. Single-actor local runs = 0.
+  //   Two teammates on a shared DB = the actually-interesting number.
+  const distinctActors = list(db, { activeOnly: true, workspaceId: opts.workspaceId, projectId: opts.projectId });
+  const actorSet = new Set(distinctActors.map((e) => e.actorId));
+  const contextReuseRate = actorSet.size <= 1 ? 0 : (actorSet.size - 1) / actorSet.size;
+
+  // Risk coverage — fraction of tasks whose likely_paths intersect any
+  // failed_attempt/gotcha event in the log. A lower bound on how often
+  // the governance gate would have had something to say.
+  let riskCovered = 0;
+  const tasksWithPaths = db.query(
+    `SELECT id, likely_paths FROM tasks WHERE created_at >= ? AND likely_paths != '[]'`,
+  ).all(since) as Array<{ id: string; likely_paths: string }>;
+  const riskEventRows = db.query(
+    `SELECT paths, scope FROM knowledge_events
+     WHERE type IN ('failed_attempt','gotcha') AND superseded_by IS NULL AND valid_from >= ?`,
+  ).all(since) as Array<{ paths: string; scope: string }>;
+  for (const t of tasksWithPaths) {
+    const tPaths = safeParsePaths(t.likely_paths);
+    for (const e of riskEventRows) {
+      const ePaths = safeParsePaths(e.paths);
+      const hit = tPaths.some((p) =>
+        ePaths.some((ep) => p === ep || p.startsWith(`${ep}/`) || ep.startsWith(`${p}/`)) ||
+        (e.scope.startsWith("module:") && (() => {
+          const m = e.scope.slice("module:".length);
+          return tPaths.some((p) => p === m || p.startsWith(`${m}/`));
+        })()),
+      );
+      if (hit) { riskCovered++; break; }
+    }
+  }
+  const riskCoverage = tasksWithPaths.length === 0 ? 0 : riskCovered / tasksWithPaths.length;
+
+  const notes: string[] = [];
+  if (executions === 0) notes.push("no executions in window — try `--since` older than default 30d");
+  if (thrashOccurrences === 0 && executions > 5) notes.push("no thrash occurrences — either the loop is well-behaved or thrash detection is off");
+  if (actorSet.size <= 1) notes.push("single-actor run: context-reuse is definitionally 0 until a teammate shares the log");
+  notes.push("token savings vs a naive-context baseline require the deferred seeded-corpus A/B — this report is over live telemetry only");
+
+  return {
+    windowStart: since,
+    windowEnd: now,
+    tasks: {
+      total: totalTasks,
+      completed: completedTasks,
+      failed: failedTasks,
+      completionRate: totalTasks === 0 ? 0 : completedTasks / totalTasks,
+    },
+    tokens: {
+      totalInput, totalOutput,
+      avgInputPerExecution: executions === 0 ? 0 : totalInput / executions,
+      avgOutputPerExecution: executions === 0 ? 0 : totalOutput / executions,
+    },
+    timing: {
+      avgDurationMs: withDuration.length === 0 ? 0
+        : withDuration.reduce((a, r) => a + (r.duration_ms ?? 0), 0) / withDuration.length,
+      avgTimeToFirstGreenMs: firstGreens.length === 0 ? null
+        : firstGreens.reduce((a, b) => a + b, 0) / firstGreens.length,
+    },
+    loop: {
+      executions,
+      verifyPassRate,
+      thrashOccurrences,
+      avgIterationsPerFailedTask: iterationsAvg,
+    },
+    knowledge: {
+      byType,
+      totalActive,
+      contextReuseRate,
+      riskCoverage,
+    },
+    notes,
+  };
+}
+
+function safeParsePaths(s: string): string[] {
+  try { const v = JSON.parse(s); return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []; }
+  catch { return []; }
+}
+
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}

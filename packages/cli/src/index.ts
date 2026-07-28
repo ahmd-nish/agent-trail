@@ -816,8 +816,35 @@ async function cmdKnowledge(args: string[]) {
         console.log(`${c.green("+")} imported ${rpt.inserted} event(s) · ${c.dim(String(rpt.skipped) + " already present or malformed")}`);
         return;
       }
+      case "bench": {
+        const { runBench } = await import("../../core/src/knowledge/bench.ts");
+        const daysStr = flagValue(args, "--days");
+        const since = daysStr ? new Date(Date.now() - Number(daysStr) * 86400_000).toISOString() : undefined;
+        const rpt = runBench(db, since ? { since } : undefined);
+        const emitJson = args.includes("--json");
+        if (emitJson) { console.log(JSON.stringify(rpt, null, 2)); return; }
+        console.log(`${c.bold("agent-trail bench")}  ${c.dim(rpt.windowStart.slice(0, 10) + " → " + rpt.windowEnd.slice(0, 10))}`);
+        console.log("");
+        console.log(`${c.bold("Tasks")}         ${rpt.tasks.total} total · ${c.green(String(rpt.tasks.completed) + " completed")} · ${c.red(String(rpt.tasks.failed) + " failed/blocked")} · ${c.dim("completion " + (rpt.tasks.completionRate * 100).toFixed(1) + "%")}`);
+        console.log(`${c.bold("Tokens")}        ${(rpt.tokens.totalInput / 1000).toFixed(1)}K in / ${(rpt.tokens.totalOutput / 1000).toFixed(1)}K out · avg ${Math.round(rpt.tokens.avgInputPerExecution)} + ${Math.round(rpt.tokens.avgOutputPerExecution)} per execution`);
+        const dur = rpt.timing.avgDurationMs;
+        console.log(`${c.bold("Timing")}        avg execution ${(dur / 1000).toFixed(1)}s${rpt.timing.avgTimeToFirstGreenMs !== null ? ` · avg time-to-first-green ${(rpt.timing.avgTimeToFirstGreenMs / 1000).toFixed(1)}s` : ""}`);
+        console.log(`${c.bold("Loop")}          ${rpt.loop.executions} executions · verify_tests pass ${(rpt.loop.verifyPassRate * 100).toFixed(1)}% · ${rpt.loop.thrashOccurrences} thrash · avg ${rpt.loop.avgIterationsPerFailedTask.toFixed(1)} iters/failed task`);
+        console.log(`${c.bold("Knowledge")}     ${rpt.knowledge.totalActive} active events across ${Object.keys(rpt.knowledge.byType).length} types`);
+        for (const [type, n] of Object.entries(rpt.knowledge.byType).sort((a, b) => b[1] - a[1])) {
+          console.log(`              ${c.dim("·")} ${type.padEnd(18)} ${n}`);
+        }
+        console.log(`${c.bold("Context reuse")} ${(rpt.knowledge.contextReuseRate * 100).toFixed(1)}% ${c.dim("(multiplayer metric — 0 for single-actor)")}`);
+        console.log(`${c.bold("Risk coverage")} ${(rpt.knowledge.riskCoverage * 100).toFixed(1)}% ${c.dim("(tasks whose paths overlap a prior failed_attempt/gotcha)")}`);
+        if (rpt.notes.length) {
+          console.log("");
+          console.log(c.dim("Notes"));
+          for (const n of rpt.notes) console.log(`  ${c.dim("·")} ${n}`);
+        }
+        return;
+      }
       default:
-        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)`);
+        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage`);
         process.exit(sub ? 1 : 0);
     }
   } finally {
