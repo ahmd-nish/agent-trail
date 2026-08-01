@@ -18,6 +18,7 @@ import { loadConstitution } from "../../core/src/context/store.ts";
 import { foldConstitution } from "../../core/src/knowledge/fold.ts";
 import { buildRiskIndex, formatRiskWarnings } from "../../core/src/knowledge/risk.ts";
 import { search as searchKnowledge } from "../../core/src/knowledge/search.ts";
+import { renderContract, type CapabilityContract } from "../../core/src/knowledge/contracts.ts";
 import { buildHeuristicMemory, buildL1Pack, writeTaskMemory } from "../../core/src/context/memory.ts";
 import { rankRelevantFiles } from "../../core/src/context/repo-map.ts";
 import { detectThrash, type ExecutionSample } from "../../core/src/loop/thrash.ts";
@@ -26,7 +27,9 @@ import { buildIterationMemory, renderIterationHistory, type IterationSample } fr
 import { nextTier } from "../../core/src/planner/models.ts";
 import type { ModelTier } from "../../core/src/types/index.ts";
 import { append as appendKnowledge } from "../../core/src/knowledge/store.ts";
-import { basename } from "node:path";
+import { extractContract } from "../../core/src/knowledge/contracts.ts";
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 const MAX_CONCURRENT = 3;
 // User-owned data (DB, worktrees, MCP configs) lives at the project root
@@ -306,8 +309,8 @@ class ExecutionManager {
     try {
       const db = getDb();
       const task = db
-        .query("SELECT id, title, description, success_criteria FROM tasks WHERE id = ?")
-        .get(taskId) as { id: string; title: string; description: string; success_criteria: string | null } | null;
+        .query("SELECT id, title, description, success_criteria, worktree_path FROM tasks WHERE id = ?")
+        .get(taskId) as { id: string; title: string; description: string; success_criteria: string | null; worktree_path: string | null } | null;
       if (!task) return;
       const criteria = JSON.parse(task.success_criteria ?? "[]") as string[];
 
@@ -344,10 +347,35 @@ class ExecutionManager {
       });
       writeTaskMemory(REPO_ROOT, memory);
 
-      // knowledgelayer §4.1 — same artifact, event-log form. This is the
-      // seed for §4.2b capability-contracts (Weeks 1-2 continued): the
-      // downstream tree-sitter pass extracts exports/routes/tables/env
-      // from the paths listed here, so a consumer never re-scans them.
+      // knowledgelayer §4.1 — event-log form of the artifact. When the
+      // task touched TypeScript/SQL files we ALSO extract a §4.2b
+      // capability contract (structured exports/routes/tables/env/events)
+      // and store that as the JSON body. Downstream tasks get exact
+      // signatures instead of prose, so they skip discovery entirely.
+      let body = [
+        memory.summary ? memory.summary.trim() : "",
+        fileList.length ? `Modified: ${fileList.slice(0, 12).join(", ")}${fileList.length > 12 ? "…" : ""}` : "",
+      ].filter(Boolean).join("\n");
+      try {
+        const worktree = task.worktree_path ?? REPO_ROOT;
+        const files = fileList
+          .filter((p) => /\.(m?[tj]sx?|cts|mts|sql)$/.test(p))
+          .slice(0, 20) // hard cap — a 100-file refactor doesn't need to be a 100-file contract
+          .map((p) => {
+            try {
+              return { path: p, content: readFileSync(join(worktree, p), "utf8") };
+            } catch { return null; }
+          })
+          .filter((f): f is { path: string; content: string } => f !== null);
+        const contract = extractContract({ taskId, files });
+        if (contract) {
+          // Compact JSON so we don't waste body budget on pretty-print whitespace.
+          body = JSON.stringify(contract);
+        }
+      } catch (err) {
+        console.warn(`[knowledge] contract extract failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
       try {
         appendKnowledge(db, {
           workspaceId: "local",
@@ -360,10 +388,7 @@ class ExecutionManager {
           type: "artifact_summary",
           scope: `task:${taskId}`,
           subject: `completed · ${task.title}`,
-          body: [
-            memory.summary ? memory.summary.trim() : "",
-            fileList.length ? `Modified: ${fileList.slice(0, 12).join(", ")}${fileList.length > 12 ? "…" : ""}` : "",
-          ].filter(Boolean).join("\n"),
+          body,
           paths: fileList,
           confidence: "observed",
           supersedes: null,
@@ -1170,7 +1195,18 @@ class ExecutionManager {
           const lines: string[] = ["## Upstream task handoffs", ""];
           for (const r of uniq) {
             lines.push(`### ${r.subject}`);
-            lines.push(r.body.trim());
+            // §4.2b — body may be a JSON-encoded capability contract or
+            // prose. Try to parse; render the structured form when possible
+            // so the downstream task inherits exact signatures instead of a
+            // paragraph. Falls back to raw body on parse failure.
+            const contract = tryParseContract(r.body);
+            if (contract) {
+              lines.push("```");
+              lines.push(renderContract(contract));
+              lines.push("```");
+            } else {
+              lines.push(r.body.trim());
+            }
             lines.push("");
           }
           depSummariesBlock = lines.join("\n");
@@ -1576,6 +1612,18 @@ function toUiEvent(event: StreamEvent): object | null {
 
 function safeJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return s; }
+}
+
+function tryParseContract(body: string): CapabilityContract | null {
+  const trimmed = body?.trim();
+  if (!trimmed?.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as Partial<CapabilityContract>;
+    if (parsed?.type === "capability_contract" && parsed.provides) {
+      return parsed as CapabilityContract;
+    }
+  } catch { /* not a contract — fall through */ }
+  return null;
 }
 
 export interface BlockerInfo {

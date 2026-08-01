@@ -3,6 +3,8 @@ export { append, count, getById, hashEvent, list } from "./store.ts";
 export type { AppendOptions, AppendResult, ListFilter } from "./store.ts";
 export { backfillFromContextDir } from "./backfill.ts";
 export type { BackfillReport } from "./backfill.ts";
+export { extractContract, renderContract } from "./contracts.ts";
+export type { CapabilityContract, ExtractContractInput } from "./contracts.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";
 export { search } from "./search.ts";

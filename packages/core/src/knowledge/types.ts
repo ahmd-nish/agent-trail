@@ -54,5 +54,8 @@ export type NewKnowledgeEvent = Omit<KnowledgeEvent, "id" | "contentHash" | "cre
   validFrom?: string;            // defaults to now
 };
 
-/** Body cap — matches doc §4.1: "capped ~1200 chars". */
-export const BODY_CHAR_CAP = 1200;
+/** Body cap. Doc §4.1 spec was ~1200 chars for prose events. Bumped to
+ *  4000 to hold a structured capability contract (§4.2b) as JSON when
+ *  extraction succeeds. Prose events are typically 300–800 chars so this
+ *  is well above the observed distribution and still bounded. */
+export const BODY_CHAR_CAP = 4000;
