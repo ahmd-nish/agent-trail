@@ -45,8 +45,8 @@ tasksRouter.post("/boards/:boardId/tasks", async (c) => {
       tdd_enabled, tdd_phase, mcps, skills, subagents, depends_on,
       parallel_group, success_criteria, guardrails, epic, sprint,
       review_kind, reviewer, additional_prompt, model, model_tier, component,
-      external_dependencies, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      external_dependencies, likely_paths, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     boardId,
@@ -73,6 +73,7 @@ tasksRouter.post("/boards/:boardId/tasks", async (c) => {
     modelTier,
     body.component ?? null,
     JSON.stringify(body.externalDependencies ?? []),
+    JSON.stringify(Array.isArray(body.likelyPaths) ? body.likelyPaths : []),
     now,
     now,
   );

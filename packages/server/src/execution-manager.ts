@@ -16,6 +16,8 @@ import type { StreamEvent } from "../../core/src/types/stream-json.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
 import { loadConstitution } from "../../core/src/context/store.ts";
 import { foldConstitution } from "../../core/src/knowledge/fold.ts";
+import { buildRiskIndex, formatRiskWarnings } from "../../core/src/knowledge/risk.ts";
+import { search as searchKnowledge } from "../../core/src/knowledge/search.ts";
 import { buildHeuristicMemory, buildL1Pack, writeTaskMemory } from "../../core/src/context/memory.ts";
 import { rankRelevantFiles } from "../../core/src/context/repo-map.ts";
 import { detectThrash, type ExecutionSample } from "../../core/src/loop/thrash.ts";
@@ -1103,11 +1105,107 @@ class ExecutionManager {
       steers: pendingSteers.map((s) => ({ kind: s.kind, text: s.text, createdAt: s.created_at })),
       iterationHistory,
     });
-    // Concatenate L0 + L1. L1 goes AFTER the constitution so team rulings
-    // dominate; L1 is scaffolding for this specific task.
-    const constitution = [constitutionText, l1.content ? `## Task pack (L1)\n\n${l1.content}` : ""]
+
+    // knowledgelayer §4.5 — auto-precheck (Band D). Every spawn gets a
+    // deterministic warning block for prior failed_attempt / gotcha events
+    // on the files this task is about to touch. No LLM call; no manual
+    // MCP invocation required. Cross-task, cross-teammate.
+    let bandD = "";
+    try {
+      const touchPaths = [...new Set([...(task.likelyPaths ?? []), ...relevantFiles])];
+      if (touchPaths.length > 0) {
+        const idx = buildRiskIndex(db, touchPaths);
+        bandD = formatRiskWarnings(idx);
+      }
+    } catch (err) {
+      console.warn(`[knowledge] precheck at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // knowledgelayer §4.3 — retrieval on plan. Top-3 semantically-similar
+    // knowledge events for this task's title+description. FTS5 + confidence
+    // weighting; vector kNN is deferred. This is how the task pack picks up
+    // rulings that AREN'T on its DAG lineage but still apply — the
+    // multiplayer read primitive.
+    let relatedBlock = "";
+    try {
+      const hits = searchKnowledge(db, taskText, { limit: 3 });
+      // Skip self-reference: a task's own artifact_summary would show up on
+      // a re-run since its subject matches its title.
+      const filtered = hits.filter((h) => h.event.taskId !== task.id);
+      if (filtered.length > 0) {
+        const lines: string[] = ["## Related team knowledge", ""];
+        for (const h of filtered) {
+          const date = h.event.validFrom.slice(0, 10);
+          lines.push(`- **${date} · ${h.event.actorName} · ${h.event.type}** — ${h.event.subject}`);
+          if (h.event.body.trim()) {
+            lines.push(`  ${h.event.body.trim().split("\n").join("\n  ")}`);
+          }
+        }
+        relatedBlock = lines.join("\n");
+      }
+    } catch (err) {
+      console.warn(`[knowledge] search at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // knowledgelayer §4.2b (partial) — DAG dependency handoff via events.
+    // Each `dependsOn` task's artifact_summary event is included so the
+    // downstream task inherits an exact structured summary — not a fuzzy
+    // markdown file. Falls back to file-based memories (still in buildL1Pack
+    // above) when no event exists, so nothing regresses.
+    let depSummariesBlock = "";
+    try {
+      const deps = task.dependsOn ?? [];
+      if (deps.length > 0) {
+        const placeholders = deps.map(() => "?").join(",");
+        const rows = db.query(
+          `SELECT task_id, subject, body FROM knowledge_events
+           WHERE type = 'artifact_summary' AND superseded_by IS NULL
+             AND task_id IN (${placeholders})
+           ORDER BY id DESC`,
+        ).all(...deps) as Array<{ task_id: string; subject: string; body: string }>;
+        // Dedupe on task_id — latest artifact_summary per dep wins.
+        const seen = new Set<string>();
+        const uniq = rows.filter((r) => (seen.has(r.task_id) ? false : (seen.add(r.task_id), true)));
+        if (uniq.length > 0) {
+          const lines: string[] = ["## Upstream task handoffs", ""];
+          for (const r of uniq) {
+            lines.push(`### ${r.subject}`);
+            lines.push(r.body.trim());
+            lines.push("");
+          }
+          depSummariesBlock = lines.join("\n");
+        }
+      }
+    } catch (err) {
+      console.warn(`[knowledge] dep handoff at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Order (constitution first — team-wide rulings) → (task L1 — this task's
+    // scaffolding) → (upstream handoffs — structured summaries of deps) →
+    // (related — cross-cutting knowledge) → (Band D — governance warnings).
+    // Bands A/B (cacheable) and C/D (per-spawn) will formalize this order
+    // with explicit cache breakpoints; this is the same content in the
+    // same order.
+    const constitution = [
+      constitutionText,
+      l1.content ? `## Task pack (L1)\n\n${l1.content}` : "",
+      depSummariesBlock,
+      relatedBlock,
+      bandD ? `## Governance warnings (Band D)\n\n${bandD}` : "",
+    ]
       .filter(Boolean)
       .join("\n\n");
+
+    // Persist the resolved prompt on the executions row. Gives replay / audit
+    // / benchmarking a stable observable (previously null even though the
+    // schema had the column). Truncated to 64 KB so a pathological pack can't
+    // blow the DB row size — real prompts are ~5-20 KB.
+    try {
+      db.query("UPDATE executions SET system_prompt = ? WHERE id = ?")
+        .run(constitution.slice(0, 64 * 1024), executionId);
+    } catch (err) {
+      console.warn(`[executions] system_prompt persist failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
 
     const proc = spawnClaudeCode({
       task: taskWithDecision,
