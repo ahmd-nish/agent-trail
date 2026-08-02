@@ -28,7 +28,7 @@ import { nextTier } from "../../core/src/planner/models.ts";
 import type { ModelTier } from "../../core/src/types/index.ts";
 import { append as appendKnowledge } from "../../core/src/knowledge/store.ts";
 import { extractContract } from "../../core/src/knowledge/contracts.ts";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const MAX_CONCURRENT = 3;
@@ -358,9 +358,13 @@ class ExecutionManager {
       ].filter(Boolean).join("\n");
       try {
         const worktree = task.worktree_path ?? REPO_ROOT;
-        const files = fileList
-          .filter((p) => /\.(m?[tj]sx?|cts|mts|sql)$/.test(p))
-          .slice(0, 20) // hard cap — a 100-file refactor doesn't need to be a 100-file contract
+        // `git status --porcelain` shortens an untracked directory to just
+        // its parent (`?? packages/`) so fileList can contain dir entries.
+        // Expand any dir into its individual extractable files before
+        // handing to the contract extractor. Otherwise a task that creates
+        // a whole new dir gets a null contract — the exact case verify hit.
+        const expanded = expandFileList(worktree, fileList).slice(0, 20);
+        const files = expanded
           .map((p) => {
             try {
               return { path: p, content: readFileSync(join(worktree, p), "utf8") };
@@ -1612,6 +1616,47 @@ function toUiEvent(event: StreamEvent): object | null {
 
 function safeJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return s; }
+}
+
+// Expand a `git status --porcelain` filelist into individual extractable
+// files. Entries with the target extensions pass through. Entries that
+// point at a directory (either explicit trailing slash, or verified as a
+// dir on disk) are walked recursively — capped at 200 files per dir to
+// avoid runaway node_modules-style trees.
+function expandFileList(worktree: string, fileList: string[]): string[] {
+  const EXTR = /\.(m?[tj]sx?|cts|mts|sql)$/;
+  const out: string[] = [];
+  for (const raw of fileList) {
+    const entry = raw.endsWith("/") ? raw.slice(0, -1) : raw;
+    const abs = join(worktree, entry);
+    let isDir = false;
+    try { isDir = statSync(abs).isDirectory(); } catch { /* missing → skip */ }
+    if (isDir) {
+      walkDir(abs, entry, out, 200);
+    } else if (EXTR.test(entry)) {
+      out.push(entry);
+    }
+  }
+  return [...new Set(out)];
+}
+
+function walkDir(absDir: string, relPrefix: string, out: string[], budget: number): void {
+  if (out.length >= budget) return;
+  let entries: string[] = [];
+  try { entries = readdirSync(absDir); } catch { return; }
+  for (const name of entries) {
+    if (name.startsWith(".") || name === "node_modules") continue;
+    const abs = join(absDir, name);
+    const rel = relPrefix ? `${relPrefix}/${name}` : name;
+    let s;
+    try { s = statSync(abs); } catch { continue; }
+    if (s.isDirectory()) {
+      walkDir(abs, rel, out, budget);
+    } else if (s.isFile() && /\.(m?[tj]sx?|cts|mts|sql)$/.test(name)) {
+      out.push(rel);
+      if (out.length >= budget) return;
+    }
+  }
 }
 
 function tryParseContract(body: string): CapabilityContract | null {
