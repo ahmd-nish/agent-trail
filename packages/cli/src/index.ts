@@ -898,8 +898,36 @@ async function cmdKnowledge(args: string[]) {
         }
         return;
       }
+      case "sync": {
+        // §4.6 — push then pull against a relay. Append-only means there is
+        // never a conflict to resolve; offline just means the cursors do not
+        // advance and the next run sends the same batch.
+        const { syncOnce, getSyncState } = await import("../../core/src/knowledge/sync.ts");
+        const remote = flagValue(args, "--remote") ?? process.env["AGENT_TRAIL_RELAY_URL"];
+        if (!remote) {
+          console.error(`${c.red("✗")} usage: agent-trail knowledge sync --remote <url> [--workspace <id>] [--project <id>]`);
+          console.error(c.dim("  or set AGENT_TRAIL_RELAY_URL. Token via --token or AGENT_TRAIL_RELAY_TOKEN."));
+          process.exit(2);
+        }
+        const res = await syncOnce(db, {
+          remote,
+          workspaceId: flagValue(args, "--workspace") ?? "local",
+          projectId: flagValue(args, "--project") ?? "local",
+          token: flagValue(args, "--token") ?? process.env["AGENT_TRAIL_RELAY_TOKEN"],
+          localOnly: args.includes("--local-only"),
+        });
+        if (res.skipped) {
+          console.log(`${c.amber("~")} sync skipped — ${res.reason ?? "unknown"}`);
+          const st = getSyncState(db, remote);
+          if (st?.lastError) console.log(c.dim(`  last error: ${st.lastError}`));
+          process.exit(res.reason?.includes("local-only") ? 0 : 1);
+        }
+        console.log(`${c.green("+")} pushed ${res.pushed.events} event(s) / ${res.pushed.edges} edge(s) · pulled ${res.pulled.events} / ${res.pulled.edges}`);
+        if (res.cursor) console.log(c.dim(`  cursor ${res.cursor}`));
+        return;
+      }
       default:
-        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate`);
+        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate\n  ${c.bold("sync")} --remote <url>               Push/pull the event log against a relay (§4.6)`);
         process.exit(sub ? 1 : 0);
     }
   } finally {

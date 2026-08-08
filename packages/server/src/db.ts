@@ -12,6 +12,7 @@ import {
   KNOWLEDGE_EVENTS_FTS_TRIGGERS,
   KNOWLEDGE_EVENTS_INDEXES,
 } from "../../core/src/knowledge/schema.ts";
+import { SYNC_STATE_DDL } from "../../core/src/knowledge/sync.ts";
 
 const schemaPath = join(import.meta.dir, "../../core/src/storage/schema.sql");
 
@@ -473,6 +474,16 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
            WHERE id = NEW.id;
         END;
       `);
+    },
+  },
+  {
+    version: 28,
+    description: "knowledgelayer §4.6 — sync_state (cursors, not an outbox)",
+    up: (db) => {
+      // An append-only ULID-keyed log needs a cursor, not an outbox: "what is
+      // unsent" is exactly "everything after the last id I pushed", which is
+      // one string per remote.
+      db.exec(SYNC_STATE_DDL);
     },
   },
 ];

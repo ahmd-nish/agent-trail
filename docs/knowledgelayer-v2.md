@@ -443,18 +443,51 @@ The buy/build split makes this dramatically simpler, and this is the strongest a
 
 So the sync surface is the small, precious half. Nobody ships a GB index over the wire; each teammate's adapter builds locally, and agent-trail syncs kilobytes of decisions on top. That is a clean answer to *"shareable between multiple users and multiple agents on the same project."*
 
-- [ ] `POST /v1/events` — append, dedupe on `content_hash`. Carries `knowledge_edges` in the same envelope.
-- [ ] `GET /v1/events?since=<ulid>` — tail, returns next cursor.
-- [ ] `GET /v1/events/stream?since=<ulid>` — SSE live tail.
-- [ ] Local outbox on the SQLite mirror; on reconnect push unsent, pull from cursor. Append-only ⇒ no conflict resolution.
+- [x] `POST /v1/events` — append, dedupe on `content_hash`. Carries `knowledge_edges` in the same envelope.
+- [x] `GET /v1/events?since=<ulid>` — tail, returns next cursor.
+- [x] `GET /v1/events/stream?since=<ulid>` — SSE live tail.
+- [x] Local outbox on the SQLite mirror; on reconnect push unsent, pull from cursor. Append-only ⇒ no conflict resolution.
 - [ ] Workspace model + better-auth GitHub OAuth; replace `workspace_id` hardcoded to `'local'`.
-- [ ] `sync: local-only` per project, before anyone is charged (§5.2).
+- [x] `sync: local-only` per project, before anyone is charged (§5.2).
 
 Still explicitly **not** adopting ElectricSQL / PowerSync / Zero / LiveStore or any CRDT library. An append-only log needs a cursor, not a sync engine (§4.1 property 2).
 
 **Timing note.** The multi-user gap is closing from the code side: Graphify shipped a Streamable HTTP transport so one shared graph server serves a whole team, and GitNexus added an enterprise track. Shared *code* graphs are being solved right now. Shared, attributed, temporally-valid *decision* knowledge is not — and that window is not indefinite.
 
 **Exit criteria:** two machines, one workspace. Answer a decision ticket on A; B's next spawn inherits it with no git push.
+
+> **CORE DONE 2026-08-08 — with a named gap, see below.** Exit criterion met and pinned by
+> `relay-e2e.test.ts` (10 tests): two SQLite machines that never touch each other's disk,
+> a ruling made on A, and B inherits it — attribution intact, and *usable*, because B's
+> governance query finds it by file. That last part only works because ULIDs survive the
+> wire; a re-keyed event would silently orphan every `governs` edge pointing at `kev:<ulid>`.
+>
+> **No outbox table.** For an append-only ULID-keyed log, "what is unsent" is exactly
+> "everything after the last id I pushed" — one string per remote. An outbox would be
+> bookkeeping for a problem the data model already deleted. `sync_state` (migration v28)
+> holds three cursors and nothing else.
+>
+> Verified: idempotent round trips, supersession replicating (B sees the correction, not
+> the original), offline holding its cursors so the retry sends the same batch, project
+> isolation, malformed rows skipped without stalling a batch, and `sync:local-only`
+> checked *before any read of the log* so nothing can leak past a later bug.
+>
+> New: `agent-trail knowledge sync --remote <url>`.
+>
+> ### ⚠ What is NOT done — do not read this phase as finished
+>
+> - **Auth is a shared bearer token**, and that is all it is. Enough for a self-hosted
+>   team relay; it is **not** identity. The §5.1 hosted tier needs better-auth + GitHub
+>   OAuth and a real workspace/membership model — a shared secret must not be mistaken for
+>   either. The relay refuses to start unguarded (disabled unless `AGENT_TRAIL_RELAY_TOKEN`
+>   is set) so nobody stands one up by accident.
+> - **No workspace model.** `workspace_id` is still a string the client asserts. Anyone
+>   holding the token can read or write any workspace on that relay.
+> - **SSE live tail polls** (1s) instead of using LISTEN/NOTIFY — correct for SQLite and
+>   multi-process, but it is the SQLite-shaped answer, not the Postgres one (§4.7).
+> - **Presence, live session join, shared steering, decision-inbox UI** — all still unbuilt.
+>   These are the *demo*, and they sit on top of this protocol rather than inside it.
+> - **Stripe / billing** — untouched.
 
 ---
 
