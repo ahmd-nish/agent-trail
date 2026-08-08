@@ -30,6 +30,11 @@ export {
 export type { SignatureSet, ValidityReport, ValidityStatus } from "./validity.ts";
 export { hooksDir, installPostMergeHook, uninstallPostMergeHook } from "./hooks.ts";
 export type { HookInstallResult } from "./hooks.ts";
+// §6 — hybrid retrieval (lexical ∪ structural) and the Band B projections.
+export { formatRetrievedFacts, retrieveForTask } from "./retrieval.ts";
+export type { RetrievalOptions, RetrievedFact, SeedSource } from "./retrieval.ts";
+export { projectModuleBriefs, projectObsidianVault, projectProjectMap } from "./projections.ts";
+export type { ModuleBrief, ProjectMap, ProjectionOptions, VaultNote } from "./projections.ts";
 export type { CodeIndexBenchOptions, CodeIndexBenchReport } from "./code-index-bench.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";

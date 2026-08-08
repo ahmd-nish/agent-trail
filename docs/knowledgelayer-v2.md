@@ -386,15 +386,45 @@ One correction to the original §4.3 scoring formula: it contains `× 0 if super
 
 ## 6. Phase 4 — retrieval and projections over the joined graph (3 days)
 
-- [ ] Extend `search()` to seed from two sources: FTS5/BM25 over `knowledge_events` (exists), **union** the Q1 reverse lookup from `task.likelyPaths`. Structural seeding is what makes the graph pay; similarity alone cannot answer *"I'm changing `createSession`, what breaks?"*
-- [ ] Score with the §4.3 formula, adding one term: `resolver_weight` (typed index 1.0 / `native` regex 0.6), because a regex-resolved edge is weaker evidence.
-- [ ] Cut to the pack budget. Emit signatures, paths, and facts.
-- [ ] `projectModuleBriefs()` and `projectProjectMap()` — the two §4.2 projections still ❌. These belong in Band B where they are written once and read at 0.10×, not regenerated per query.
-- [ ] `projectObsidianVault()` — one fold beside `projectConstitutionMd` / `projectAgentsMd`. Emits one note per active event with frontmatter and `[[wikilinks]]` along `governs` edges, so the graph is browsable by humans in Obsidian and readable by any MCP-connected agent. Export target, not a store.
+- [x] Extend `search()` to seed from two sources: FTS5/BM25 over `knowledge_events` (exists), **union** the Q1 reverse lookup from `task.likelyPaths`. Structural seeding is what makes the graph pay; similarity alone cannot answer *"I'm changing `createSession`, what breaks?"*
+- [x] Score with the §4.3 formula, adding one term: `resolver_weight` (typed index 1.0 / `native` regex 0.6), because a regex-resolved edge is weaker evidence.
+- [x] Cut to the pack budget. Emit signatures, paths, and facts.
+- [x] `projectModuleBriefs()` and `projectProjectMap()` — the two §4.2 projections still ❌. These belong in Band B where they are written once and read at 0.10×, not regenerated per query.
+- [x] `projectObsidianVault()` — one fold beside `projectConstitutionMd` / `projectAgentsMd`. Emits one note per active event with frontmatter and `[[wikilinks]]` along `governs` edges, so the graph is browsable by humans in Obsidian and readable by any MCP-connected agent. Export target, not a store.
 
 **Defer:** embeddings, vector kNN, and RRF fusion. The category's evidence in §0 is that structure beats similarity for code, Graphify ships with no vector DB at all, and BM25 + structural seeding covers the cases you have. Revisit only when §7 measurement shows a gap.
 
 **Exit criteria:** a task whose `likelyPaths` overlap a governed module gets the ruling in its pack without the ruling's text matching the task description.
+
+> **DONE 2026-08-08.** Exit criterion met — verified both in a unit test and in a real
+> spawn: a task titled "add session expiry to login" receives a fact whose text shares no
+> word with it, reached purely because it governs a file in the task's footprint.
+>
+> **The two prompt sections became one.** `Related team knowledge` (lexical) and
+> `Knowledge graph (§J)` (structural) were rendering separately, so an event reached both
+> ways was printed **twice** — spending the budget this layer exists to protect. They are
+> now seeded separately, scored together, and rendered once. That also makes the correct
+> ranking expressible for the first time: a fact found BOTH lexically and structurally now
+> outranks one found either way alone, which was impossible while the blocks were separate.
+>
+> Each fact says *how* it was reached (`governs file:src/auth.ts`, `governs a caller of
+> your files`, `similar to this task`) — "why am I being told this" is the difference
+> between context and noise.
+>
+> Scoring is the §4.3 formula plus §6's `resolver_weight`: `paths`/`contract` edges are
+> exact (1.0) because they came from a literal file list; `native` regex edges are weaker
+> evidence (0.6). Lexical seeds are ranked, not raw-BM25 — BM25 scores are not comparable
+> across queries, and mixing an uncalibrated score with the structural side would let one
+> source silently dominate. Rulings never decay with age; observations halve every 60 days.
+>
+> **Projections built and tested, NOT yet injected.** `projectModuleBriefs()`,
+> `projectProjectMap()` and `projectObsidianVault()` all exist with 13 tests. They belong
+> in **Band B**, and the three-band prompt restructure (§4.4) has not been done — so they
+> are currently callable but not in any prompt. Wiring them without the band structure
+> would regenerate them per query at full price, which is exactly what §4.4 exists to
+> avoid. This is a real remaining gap, not a finished item.
+>
+> Embeddings / vector kNN / RRF remain deferred per §6.
 
 ---
 

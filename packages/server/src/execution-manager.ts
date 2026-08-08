@@ -17,8 +17,8 @@ import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.
 import { loadConstitution } from "../../core/src/context/store.ts";
 import { foldConstitution } from "../../core/src/knowledge/fold.ts";
 import { buildRiskIndex, formatRiskWarnings } from "../../core/src/knowledge/risk.ts";
-import { search as searchKnowledge } from "../../core/src/knowledge/search.ts";
-import { blastRadius, formatGoverningHits, resolveSymbolEdges } from "../../core/src/knowledge/edges.ts";
+import { resolveSymbolEdges } from "../../core/src/knowledge/edges.ts";
+import { formatRetrievedFacts, retrieveForTask } from "../../core/src/knowledge/retrieval.ts";
 import { resolveCodeIndex } from "../../core/src/knowledge/code-index.ts";
 import {
   checkContractValidity, formatValidityWarning, gitHeadSha, rederiveContract,
@@ -1191,54 +1191,32 @@ class ExecutionManager {
       console.warn(`[knowledge] precheck at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    // knowledgelayer-v2 §J — the join. Q1 (what governs these files) plus Q2
-    // (blast radius: knowledge attached to the CALLERS of the symbols this
-    // task is about to change). Structural seeding, not similarity — it finds
-    // rulings whose text has nothing in common with the task description.
+    // knowledgelayer-v2 §6 — hybrid retrieval over the joined graph.
     //
-    // Q2 is the query no single tool in the market answers: the code graph
-    // supplies structural reach, the knowledge graph supplies the rulings and
-    // prior failures that apply to it. Fail-soft: any adapter or DB problem
-    // degrades to Q1, and Q1's absence degrades to an empty block.
-    let joinBlock = "";
-    try {
-      const touchPaths = [...new Set([...(task.likelyPaths ?? []), ...relevantFiles])];
-      if (touchPaths.length > 0) {
-        const codeIndex = await resolveCodeIndex({ root: REPO_ROOT });
-        const hits = (await blastRadius(db, touchPaths, codeIndex, { limit: 8 }))
-          // A task's own events are not news to it.
-          .filter((h) => h.event.taskId !== task.id);
-        const rendered = formatGoverningHits(hits);
-        if (rendered) joinBlock = `## Knowledge graph (§J)\n\n${rendered}`;
-      }
-    } catch (err) {
-      console.warn(`[knowledge] §J join at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    // knowledgelayer §4.3 — retrieval on plan. Top-3 semantically-similar
-    // knowledge events for this task's title+description. FTS5 + confidence
-    // weighting; vector kNN is deferred. This is how the task pack picks up
-    // rulings that AREN'T on its DAG lineage but still apply — the
-    // multiplayer read primitive.
+    // ONE ranked block, seeded two ways: lexically (FTS5 over the log) and
+    // structurally (§J edges from this task's file footprint, expanded one hop
+    // through the code graph). Previously these rendered as two sections,
+    // which meant an event reached both ways was printed twice — spending the
+    // budget this layer exists to protect. Merging them also lets a fact found
+    // BOTH ways outrank one found either way alone, which is the correct
+    // ranking and was not expressible while they were separate.
+    //
+    // Fail-soft throughout: no adapter degrades Q2 to Q1, no edges degrades to
+    // lexical-only, and a total failure degrades to an empty block.
     let relatedBlock = "";
     try {
-      const hits = searchKnowledge(db, taskText, { limit: 3 });
-      // Skip self-reference: a task's own artifact_summary would show up on
-      // a re-run since its subject matches its title.
-      const filtered = hits.filter((h) => h.event.taskId !== task.id);
-      if (filtered.length > 0) {
-        const lines: string[] = ["## Related team knowledge", ""];
-        for (const h of filtered) {
-          const date = h.event.validFrom.slice(0, 10);
-          lines.push(`- **${date} · ${h.event.actorName} · ${h.event.type}** — ${h.event.subject}`);
-          if (h.event.body.trim()) {
-            lines.push(`  ${h.event.body.trim().split("\n").join("\n  ")}`);
-          }
-        }
-        relatedBlock = lines.join("\n");
-      }
+      const touchPaths = [...new Set([...(task.likelyPaths ?? []), ...relevantFiles])];
+      const codeIndex = await resolveCodeIndex({ root: REPO_ROOT });
+      const facts = await retrieveForTask(
+        db,
+        { text: taskText, paths: touchPaths },
+        codeIndex,
+        { limit: 8, excludeTaskId: task.id },
+      );
+      const rendered = formatRetrievedFacts(facts);
+      if (rendered) relatedBlock = `## Related team knowledge\n\n${rendered}`;
     } catch (err) {
-      console.warn(`[knowledge] search at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[knowledge] retrieval at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     // knowledgelayer §4.2b (partial) — DAG dependency handoff via events.
@@ -1318,7 +1296,6 @@ class ExecutionManager {
       l1.content ? `## Task pack (L1)\n\n${l1.content}` : "",
       depSummariesBlock,
       relatedBlock,
-      joinBlock,
       bandD ? `## Governance warnings (Band D)\n\n${bandD}` : "",
     ]
       .filter(Boolean)
