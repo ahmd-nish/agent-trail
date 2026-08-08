@@ -54,8 +54,48 @@ export type NewKnowledgeEvent = Omit<KnowledgeEvent, "id" | "contentHash" | "cre
   validFrom?: string;            // defaults to now
 };
 
-/** Body cap. Doc §4.1 spec was ~1200 chars for prose events. Bumped to
- *  4000 to hold a structured capability contract (§4.2b) as JSON when
- *  extraction succeeds. Prose events are typically 300–800 chars so this
- *  is well above the observed distribution and still bounded. */
-export const BODY_CHAR_CAP = 4000;
+// Body caps — resolved deliberately per knowledgelayer-v2 §2 rather than by
+// picking whichever number made the test pass.
+//
+// The tension: a6fd8c0 raised the single cap 1200 -> 4000 so a structured
+// capability contract would fit. But 4000 chars is ~1000 tokens, and Band C
+// holds SEVERAL events per pack. A flat 4000 lets a handful of prose events
+// quietly consume the whole task-pack budget, which is the context bloat this
+// layer exists to kill.
+//
+// The resolution is that the two kinds of body are not the same good. Prose is
+// a summary the agent reads *in addition to* the code. A contract is a
+// substitute for opening files at all — it is the one body whose size directly
+// buys back tool calls. So only contracts earn the larger budget.
+
+/** Prose bodies — §4.1's original spec. Observed events run 300–800 chars. */
+export const BODY_CHAR_CAP = 1200;
+
+/** Structured capability contracts (§4.2b) only. ~1000 tokens, and it is spent
+ *  to avoid a downstream agent reading the files the contract describes. */
+export const CONTRACT_BODY_CHAR_CAP = 4000;
+
+/** True when a body is a serialized CapabilityContract.
+ *
+ *  Structural check rather than importing from contracts.ts — types.ts is the
+ *  leaf of this module's import graph and must stay that way. A body only
+ *  claims the larger cap if it actually parses as a contract, so an
+ *  oversized prose body cannot smuggle itself past the prose cap. */
+export function isContractBody(body: string): boolean {
+  const trimmed = body.trimStart();
+  if (!trimmed.startsWith("{")) return false;
+  try {
+    const parsed = JSON.parse(body) as { type?: unknown; provides?: unknown };
+    return parsed?.type === "capability_contract" && typeof parsed?.provides === "object";
+  } catch {
+    return false;
+  }
+}
+
+/** The cap that applies to this body. Only artifact_summary events can carry a
+ *  contract, so any other type is held to the prose cap regardless of shape. */
+export function bodyCapFor(type: EventType, body: string): number {
+  return type === "artifact_summary" && isContractBody(body)
+    ? CONTRACT_BODY_CHAR_CAP
+    : BODY_CHAR_CAP;
+}

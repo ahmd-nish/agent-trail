@@ -51,6 +51,8 @@ const HAPPY_SCENARIO = JSON.stringify({
   final: "complete",
   inputTokens: 250,
   outputTokens: 90,
+  cacheReadTokens: 800,
+  cacheCreationTokens: 120,
   durationMs: 42,
   delayMs: 20,
 });
@@ -193,6 +195,8 @@ describe("execution engine E2E — PRD 1.4", () => {
       status: string;
       total_input_tokens: number | null;
       total_output_tokens: number | null;
+      cache_read_input_tokens: number | null;
+      cache_creation_input_tokens: number | null;
       duration_ms: number | null;
       error_message: string | null;
     }>;
@@ -200,8 +204,13 @@ describe("execution engine E2E — PRD 1.4", () => {
     const exec = execs[0]!;
     expect(exec.status).toBe("completed");
     expect(exec.error_message).toBeNull();
-    expect(exec.total_input_tokens).toBe(250);
+    // total_input_tokens keeps its original meaning — billed input including
+    // cache reads (250 uncached + 800 cached). knowledgelayer-v2 §2.
+    expect(exec.total_input_tokens).toBe(1050);
     expect(exec.total_output_tokens).toBe(90);
+    // The breakdown that makes cache-hit rate measurable at all.
+    expect(exec.cache_read_input_tokens).toBe(800);
+    expect(exec.cache_creation_input_tokens).toBe(120);
     expect(exec.duration_ms).toBe(42);
 
     // 7. /api/executions/:id/telemetry has per-tool-call rows.

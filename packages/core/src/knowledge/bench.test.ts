@@ -133,4 +133,66 @@ describe("runBench()", () => {
     // 1 of 2 tasks has paths that intersect a failed_attempt
     expect(rpt.knowledge.riskCoverage).toBeCloseTo(0.5, 4);
   });
+
+  // knowledgelayer-v2 §2 — cache-hit rate, §4.4's only feedback signal.
+  describe("cache-hit rate", () => {
+    function dbWithCacheCols() {
+      const db = freshDb();
+      db.exec("ALTER TABLE executions ADD COLUMN cache_read_input_tokens INTEGER");
+      db.exec("ALTER TABLE executions ADD COLUMN cache_creation_input_tokens INTEGER");
+      return db;
+    }
+    function seedCacheExec(db: Database, id: string, total: number, read: number | null, creation = 0) {
+      db.query(
+        `INSERT INTO executions (id, task_id, status, total_input_tokens, total_output_tokens,
+           duration_ms, started_at, cache_read_input_tokens, cache_creation_input_tokens)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+      ).run(id, "t1", "completed", total, 0, 0, new Date().toISOString(), read, creation);
+    }
+
+    test("null — not 0 — when the columns predate migration v25", () => {
+      const db = freshDb();
+      seedTask(db, "t1", "done");
+      seedExec(db, { id: "e1", taskId: "t1", status: "completed", input: 1000 });
+      const rpt = runBench(db);
+      // A DB that never recorded the breakdown must not report a 0% hit rate;
+      // that would read as "caching is broken" rather than "not measured".
+      expect(rpt.tokens.cacheHitRate).toBeNull();
+      expect(rpt.tokens.cacheSampleSize).toBe(0);
+    });
+
+    test("computes read / total across rows that recorded it", () => {
+      const db = dbWithCacheCols();
+      seedTask(db, "t1", "done");
+      seedCacheExec(db, "e1", 1000, 800, 100);
+      seedCacheExec(db, "e2", 1000, 600, 50);
+      const rpt = runBench(db);
+      expect(rpt.tokens.cacheHitRate).toBeCloseTo(0.7, 4);   // 1400 / 2000
+      expect(rpt.tokens.cacheReadTokens).toBe(1400);
+      expect(rpt.tokens.cacheCreationTokens).toBe(150);
+      expect(rpt.tokens.cacheSampleSize).toBe(2);
+    });
+
+    test("pre-v25 NULL rows are excluded from the denominator, not counted as misses", () => {
+      const db = dbWithCacheCols();
+      seedTask(db, "t1", "done");
+      seedCacheExec(db, "e1", 1000, 800);
+      seedCacheExec(db, "e2", 9000, null);   // legacy row — never measured
+      const rpt = runBench(db);
+      // 800/1000, not 800/10000 — the unmeasured row must not drag the rate down.
+      expect(rpt.tokens.cacheHitRate).toBeCloseTo(0.8, 4);
+      expect(rpt.tokens.cacheSampleSize).toBe(1);
+      // but it still counts toward overall token totals
+      expect(rpt.tokens.totalInput).toBe(10000);
+    });
+
+    test("a measured 0% hit rate is reported as 0, distinct from null", () => {
+      const db = dbWithCacheCols();
+      seedTask(db, "t1", "done");
+      seedCacheExec(db, "e1", 1000, 0);
+      const rpt = runBench(db);
+      expect(rpt.tokens.cacheHitRate).toBe(0);
+      expect(rpt.tokens.cacheSampleSize).toBe(1);
+    });
+  });
 });

@@ -199,6 +199,8 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
 //     "errorMessage": string,          // only when final === "error"
 //     "inputTokens":  number,          // default 100
 //     "outputTokens": number,          // default 40
+//     "cacheReadTokens":     number,   // default 0
+//     "cacheCreationTokens": number,   // default 0
 //     "durationMs":   number,          // default 25
 //     "delayMs":      number           // delay between events; default 0
 //   }
@@ -209,6 +211,9 @@ interface MockScenario {
   errorMessage?: string;
   inputTokens?: number;
   outputTokens?: number;
+  /** Cache-token breakdown, so E2E can exercise the §4.4 measurement path. */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   durationMs?: number;
   delayMs?: number;
   /** When true, prepend an assistant text event echoing the system prompt.
@@ -282,8 +287,8 @@ function runMockAdapter(task: Task, mock: string, callbacks: AdapterCallbacks, s
       total_cost_usd: 0,
       usage: {
         input_tokens: scenario.inputTokens ?? 100,
-        cache_creation_input_tokens: 0,
-        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: scenario.cacheCreationTokens ?? 0,
+        cache_read_input_tokens: scenario.cacheReadTokens ?? 0,
         output_tokens: scenario.outputTokens ?? 40,
         server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 },
       },

@@ -2,14 +2,15 @@ import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { redact } from "./redact.ts";
 import type { EventType, KnowledgeEvent, NewKnowledgeEvent, Scope } from "./types.ts";
-import { BODY_CHAR_CAP } from "./types.ts";
+import { bodyCapFor } from "./types.ts";
 import { ulid } from "./ulid.ts";
 
 // The write path. Every knowledge-producing site in the codebase (decision
 // tickets, iteration memories, thrash, steering, artifacts) calls append().
 // It:
 //   1. redacts secrets (§5.2) before anything touches disk
-//   2. clamps body to BODY_CHAR_CAP
+//   2. clamps body to the cap for its type — prose 1200, contract 4000
+//      (knowledgelayer-v2 §2; see bodyCapFor in types.ts for the reasoning)
 //   3. hashes the semantic payload so backfill/replay is idempotent
 //   4. stamps id + createdAt + validFrom
 //   5. writes atomically
@@ -33,7 +34,10 @@ export interface AppendResult {
 export function append(db: Database, input: NewKnowledgeEvent, opts: AppendOptions = {}): AppendResult {
   const now = new Date().toISOString();
   const redactedSubject = redact(input.subject).clean;
-  const redactedBody = redact(input.body).clean.slice(0, BODY_CHAR_CAP);
+  // Redact first, then clamp — a cap applied before redaction could slice a
+  // secret in half and leave the tail in the row.
+  const cleanBody = redact(input.body).clean;
+  const redactedBody = cleanBody.slice(0, bodyCapFor(input.type, cleanBody));
 
   const contentHash = hashEvent({
     type: input.type,

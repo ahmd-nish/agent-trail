@@ -416,6 +416,23 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
       db.exec("INSERT INTO knowledge_events_fts(rowid, subject, body) SELECT rowid, subject, body FROM knowledge_events");
     },
   },
+  {
+    version: 25,
+    description: "knowledgelayer-v2 §2 — split cache token accounting out of total_input_tokens",
+    up: (db) => {
+      // total_input_tokens stays the billed-input total so existing rows and
+      // the cost dashboard keep their meaning. These two columns carry the
+      // breakdown that makes cache-hit rate measurable at all — §4.4's only
+      // feedback signal. NULL on the 38 pre-existing rows, which is honest:
+      // that data was never captured and must not be back-guessed as 0.
+      if (!columnExists(db, "executions", "cache_read_input_tokens")) {
+        db.exec("ALTER TABLE executions ADD COLUMN cache_read_input_tokens INTEGER");
+      }
+      if (!columnExists(db, "executions", "cache_creation_input_tokens")) {
+        db.exec("ALTER TABLE executions ADD COLUMN cache_creation_input_tokens INTEGER");
+      }
+    },
+  },
 ];
 
 function columnExists(db: Database, table: string, column: string): boolean {

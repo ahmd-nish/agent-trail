@@ -29,7 +29,7 @@ export {
   KNOWLEDGE_EVENTS_FTS_TRIGGERS,
   KNOWLEDGE_EVENTS_INDEXES,
 } from "./schema.ts";
-export { BODY_CHAR_CAP } from "./types.ts";
+export { BODY_CHAR_CAP, CONTRACT_BODY_CHAR_CAP, bodyCapFor, isContractBody } from "./types.ts";
 export type {
   Confidence,
   EventType,

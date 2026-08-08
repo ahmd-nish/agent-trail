@@ -66,11 +66,44 @@ describe("append()", () => {
     expect(row?.body).not.toContain("sk-ant-");
   });
 
-  test("clamps body to BODY_CHAR_CAP", () => {
+  test("clamps a prose body to the 1200-char prose cap", () => {
     const db = freshDb();
     const big = "x".repeat(5000);
     const { event } = append(db, baseEvent({ body: big }));
-    expect(event.body.length).toBeLessThanOrEqual(BODY_CHAR_CAP);
+    expect(event.body.length).toBe(BODY_CHAR_CAP);
+    expect(BODY_CHAR_CAP).toBe(1200);
+  });
+
+  test("a capability contract on artifact_summary earns the 4000-char cap", () => {
+    const db = freshDb();
+    const contract = JSON.stringify({
+      type: "capability_contract",
+      taskId: "t-1",
+      baseSha: null,
+      provides: { modules: ["a.ts"], exports: ["x".repeat(3000)], routes: [], tables: [], env: [], events: [] },
+      invariants: [],
+      deliberatelyNotDone: [],
+      entrypoints: [],
+    });
+    expect(contract.length).toBeGreaterThan(BODY_CHAR_CAP);
+    const { event } = append(db, baseEvent({ type: "artifact_summary", body: contract }));
+    expect(event.body).toBe(contract);
+    expect(JSON.parse(event.body).provides.modules).toEqual(["a.ts"]);
+  });
+
+  test("prose on artifact_summary is still held to the prose cap", () => {
+    const db = freshDb();
+    const { event } = append(db, baseEvent({ type: "artifact_summary", body: "y".repeat(5000) }));
+    expect(event.body.length).toBe(BODY_CHAR_CAP);
+  });
+
+  test("a non-contract event cannot claim the contract cap by looking like JSON", () => {
+    const db = freshDb();
+    // Same shape, wrong event type — the larger budget is earned by artifact
+    // summaries only, so a `gotcha` carrying contract-ish JSON gets clamped.
+    const body = JSON.stringify({ type: "capability_contract", provides: { pad: "z".repeat(3000) } });
+    const { event } = append(db, baseEvent({ type: "gotcha", body }));
+    expect(event.body.length).toBe(BODY_CHAR_CAP);
   });
 
   test("supersession — marks the older event as superseded_by the newer", () => {

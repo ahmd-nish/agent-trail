@@ -39,6 +39,15 @@ export interface BenchReport {
     totalOutput: number;
     avgInputPerExecution: number;
     avgOutputPerExecution: number;
+    /** Input tokens served from cache across executions that recorded it. */
+    cacheReadTokens: number;
+    /** Input tokens written to cache — the 1.25x premium a breakpoint costs. */
+    cacheCreationTokens: number;
+    /** cacheRead / totalInput. `null` when no execution has the breakdown yet
+     *  (pre-v25 rows), which is distinct from a measured rate of 0. */
+    cacheHitRate: number | null;
+    /** Executions contributing to cacheHitRate — the sample size behind it. */
+    cacheSampleSize: number;
   };
   timing: {
     avgDurationMs: number;
@@ -75,6 +84,12 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
   const has = (name: string): boolean =>
     !!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
 
+  // The cache columns arrive in migration v25. A DB that predates it — or a
+  // minimal import target — still benches, it just reports cacheHitRate null.
+  const hasCol = (table: string, col: string): boolean =>
+    (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>)
+      .some((r) => r.name === col);
+
   const taskRows = has("tasks") ? db.query(
     `SELECT id, status, created_at FROM tasks WHERE created_at >= ?`,
   ).all(since) as Array<{ id: string; status: string; created_at: string }> : [];
@@ -82,15 +97,29 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
   const completedTasks = taskRows.filter((r) => r.status === "done" || r.status === "in_review").length;
   const failedTasks = taskRows.filter((r) => r.status === "failed" || r.status === "blocked").length;
 
+  const hasCacheCols = has("executions") && hasCol("executions", "cache_read_input_tokens");
+  const cacheSelect = hasCacheCols
+    ? ", cache_read_input_tokens, cache_creation_input_tokens"
+    : "";
   const execRows = has("executions") ? db.query(
-    `SELECT total_input_tokens, total_output_tokens, duration_ms, status, task_id, started_at
+    `SELECT total_input_tokens, total_output_tokens, duration_ms, status, task_id, started_at${cacheSelect}
      FROM executions WHERE started_at >= ?`,
   ).all(since) as Array<{
     total_input_tokens: number | null; total_output_tokens: number | null;
     duration_ms: number | null; status: string; task_id: string; started_at: string;
+    cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null;
   }> : [];
   const totalInput = execRows.reduce((a, r) => a + (r.total_input_tokens ?? 0), 0);
   const totalOutput = execRows.reduce((a, r) => a + (r.total_output_tokens ?? 0), 0);
+
+  // Only rows that actually recorded the breakdown count toward the rate.
+  // Averaging over pre-v25 NULLs would silently report a hit rate near zero
+  // and make a working cache look broken.
+  const cacheRows = execRows.filter((r) => r.cache_read_input_tokens != null);
+  const cacheReadTotal = cacheRows.reduce((a, r) => a + (r.cache_read_input_tokens ?? 0), 0);
+  const cacheCreationTotal = cacheRows.reduce((a, r) => a + (r.cache_creation_input_tokens ?? 0), 0);
+  const cacheDenom = cacheRows.reduce((a, r) => a + (r.total_input_tokens ?? 0), 0);
+  const cacheHitRate = cacheDenom === 0 ? null : cacheReadTotal / cacheDenom;
   const withDuration = execRows.filter((r) => (r.duration_ms ?? 0) > 0);
 
   const executions = execRows.length;
@@ -195,6 +224,10 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
       totalInput, totalOutput,
       avgInputPerExecution: executions === 0 ? 0 : totalInput / executions,
       avgOutputPerExecution: executions === 0 ? 0 : totalOutput / executions,
+      cacheReadTokens: cacheReadTotal,
+      cacheCreationTokens: cacheCreationTotal,
+      cacheHitRate,
+      cacheSampleSize: cacheRows.length,
     },
     timing: {
       avgDurationMs: withDuration.length === 0 ? 0

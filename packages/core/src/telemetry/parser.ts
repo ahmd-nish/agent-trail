@@ -110,9 +110,23 @@ export function parseTelemetry(event: StreamEvent, raw: string): ParsedTelemetry
 }
 
 export function extractMetrics(result: StreamResultEvent) {
+  // `totalInputTokens` keeps its original meaning — every input token billed,
+  // cached or not. Four consumers (cost dashboard, bench, CLI, web) and 38 rows
+  // of history depend on that, so it is not redefined here.
+  //
+  // What was missing is the breakdown: cache reads bill at ~0.10x and cache
+  // writes at ~1.25x, so without these two fields cache-hit rate is
+  // unmeasurable and §4.4's whole premise has no feedback signal
+  // (knowledgelayer-v2 §2).
+  const cacheRead = result.usage.cache_read_input_tokens ?? 0;
+  const cacheCreation = result.usage.cache_creation_input_tokens ?? 0;
   return {
     durationMs: result.duration_ms,
-    totalInputTokens: result.usage.input_tokens + result.usage.cache_read_input_tokens,
+    totalInputTokens: result.usage.input_tokens + cacheRead,
+    /** Input tokens served from cache. Numerator of cache-hit rate. */
+    cacheReadInputTokens: cacheRead,
+    /** Input tokens written to cache at a premium. Cost of a breakpoint miss. */
+    cacheCreationInputTokens: cacheCreation,
     totalOutputTokens: result.usage.output_tokens,
     numTurns: result.num_turns,
   };

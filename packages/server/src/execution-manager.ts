@@ -759,17 +759,15 @@ class ExecutionManager {
           // multiplayer governance gate (§4.5): "Sarah tried this 3 days ago
           // and it failed with the same assertion."
           try {
-            const likelyPaths: string[] = (() => {
-              const raw = (task as unknown as { likely_paths?: string | string[] }).likely_paths;
-              if (Array.isArray(raw)) return raw;
-              if (typeof raw === "string") {
-                try {
-                  const parsed = JSON.parse(raw);
-                  return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === "string") : [];
-                } catch { return []; }
-              }
-              return [];
-            })();
+            // `task` is a rowToTask() result, so the field is camelCase and
+            // already parsed. Reading the snake_case column name here meant
+            // `paths` was ALWAYS [] on every emitted event, which silently
+            // disabled the §4.5 governance gate (buildRiskIndex matches on
+            // paths) and would have left §J's edge auto-population with
+            // nothing to join on. Caught by the Phase 0 two-task E2E.
+            const likelyPaths: string[] = (task.likelyPaths ?? []).filter(
+              (p): p is string => typeof p === "string" && p.length > 0,
+            );
             appendKnowledge(db, {
               workspaceId: "local",
               projectId: basename(REPO_ROOT) || "local",
@@ -1348,8 +1346,14 @@ class ExecutionManager {
         onComplete: (result) => {
           const m = extractMetrics(result);
           db.query(
-            "UPDATE executions SET duration_ms = ?, total_input_tokens = ?, total_output_tokens = ?, claude_session_id = ? WHERE id = ?",
-          ).run(m.durationMs, m.totalInputTokens, m.totalOutputTokens, result.session_id ?? null, executionId);
+            `UPDATE executions SET duration_ms = ?, total_input_tokens = ?, total_output_tokens = ?,
+               cache_read_input_tokens = ?, cache_creation_input_tokens = ?, claude_session_id = ?
+             WHERE id = ?`,
+          ).run(
+            m.durationMs, m.totalInputTokens, m.totalOutputTokens,
+            m.cacheReadInputTokens, m.cacheCreationInputTokens,
+            result.session_id ?? null, executionId,
+          );
 
           // PRD_OPEN_SOURCE 2.3 — if a budget cap wrote a ticket, treat as
           // awaiting_human so the human sees the ticket rather than a bare
