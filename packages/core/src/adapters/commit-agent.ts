@@ -21,6 +21,11 @@ export interface CommitOpts {
   /** If false, don't actually invoke git — just return what we would do.
    *  Used by tests + a `--dry-run` mode. */
   execute?: boolean;
+  /** §4.2e — id of the capability contract this commit produced. Recorded as
+   *  a commit TRAILER, not a git note: trailers survive rebase and
+   *  cherry-pick and push by default, which is exactly the set of mutations
+   *  the validity oracle exists to survive. */
+  contractId?: string;
 }
 
 export interface CommitResult {
@@ -41,8 +46,11 @@ export function autoCommit(opts: CommitOpts): CommitResult {
   if (!status.stdout?.trim()) return { performed: false, reason: "no changes to commit" };
 
   // 2. Generate the commit message.
-  const message = opts.messageOverride ?? generateMessage(opts.task, status.stdout, opts.style ?? "conventional");
-  if (!message.trim()) return { performed: false, reason: "empty commit message" };
+  const base = opts.messageOverride ?? generateMessage(opts.task, status.stdout, opts.style ?? "conventional");
+  if (!base.trim()) return { performed: false, reason: "empty commit message" };
+  const message = opts.contractId
+    ? `${base.trimEnd()}\n\nAgent-Trail-Contract: ${opts.contractId}`
+    : base;
 
   if (!execute) {
     return { performed: false, reason: "dry-run", message };

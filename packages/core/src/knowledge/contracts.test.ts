@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractContract, renderContract } from "./contracts.ts";
+import { extractContract, renderContract, stripFunctionBody } from "./contracts.ts";
 
 describe("extractContract() — TypeScript exports", () => {
   test("returns null when files provide nothing extractable", () => {
@@ -215,5 +215,34 @@ emit("session.created", d);
     expect(out).toContain("env: SESSION_SECRET");
     expect(out).toContain("events: session.created");
     expect(out).toContain("entrypoints:");
+  });
+});
+
+describe("stripFunctionBody", () => {
+  test("cuts a one-line body but keeps the full signature", () => {
+    expect(stripFunctionBody("function f(a: string): string { return a; }"))
+      .toBe("function f(a: string): string");
+  });
+
+  test("keeps an object return type", () => {
+    // `: {` opens a type, not a body — cutting here would truncate the
+    // signature, which is the whole thing a contract exists to convey.
+    expect(stripFunctionBody("function f(a: string): { id: string; n: number }"))
+      .toBe("function f(a: string): { id: string; n: number }");
+  });
+
+  test("cuts the body after an object return type", () => {
+    expect(stripFunctionBody("function f(a: string): { id: string } { return { id: a }; }"))
+      .toBe("function f(a: string): { id: string }");
+  });
+
+  test("handles a default value containing braces in the params", () => {
+    expect(stripFunctionBody("function f(o = { a: 1 }): void { go(); }"))
+      .toBe("function f(o = { a: 1 }): void");
+  });
+
+  test("leaves a body-less signature untouched", () => {
+    expect(stripFunctionBody("function f(a: string): Promise<void>"))
+      .toBe("function f(a: string): Promise<void>");
   });
 });

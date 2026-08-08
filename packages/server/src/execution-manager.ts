@@ -20,6 +20,10 @@ import { buildRiskIndex, formatRiskWarnings } from "../../core/src/knowledge/ris
 import { search as searchKnowledge } from "../../core/src/knowledge/search.ts";
 import { blastRadius, formatGoverningHits, resolveSymbolEdges } from "../../core/src/knowledge/edges.ts";
 import { resolveCodeIndex } from "../../core/src/knowledge/code-index.ts";
+import {
+  checkContractValidity, formatValidityWarning, gitHeadSha, rederiveContract,
+  resolveSignatureSet,
+} from "../../core/src/knowledge/validity.ts";
 
 // §J step 3 — resolve `sym:` edges for an event's file footprint. Kept out of
 // append() on purpose: append is synchronous and sits on the write path of
@@ -389,8 +393,23 @@ class ExecutionManager {
             } catch { return null; }
           })
           .filter((f): f is { path: string; content: string } => f !== null);
-        const contract = extractContract({ taskId, files });
+        // §4.2e — anchor the contract to the commit it was extracted at, and
+        // record the signature set it was extracted FROM. Staleness is derived
+        // later by recomputing this and comparing; it is never stored as a
+        // boolean, because a `stale` flag is wrong the moment anyone rebases.
+        const baseSha = gitHeadSha(worktree);
+        const contract = extractContract({ taskId, baseSha, files });
         if (contract) {
+          try {
+            const index = await resolveCodeIndex({ root: worktree });
+            const set = await resolveSignatureSet(index, contract.provides.modules);
+            contract.signatureHash = set.hash;
+            contract.signatureEntries = set.entries;
+          } catch (err) {
+            // No hash recorded means validity reports `unknown`, never `valid`.
+            // Degrading to "cannot tell" is correct; degrading to "fine" is not.
+            console.warn(`[knowledge] signature hash failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
           // Compact JSON so we don't waste body budget on pretty-print whitespace.
           body = JSON.stringify(contract);
         }
@@ -1251,8 +1270,30 @@ class ExecutionManager {
             // paragraph. Falls back to raw body on parse failure.
             const contract = tryParseContract(r.body);
             if (contract) {
+              // §4.2e — validity is a QUERY, answered here at pack time
+              // against the working tree, never a flag read off the row.
+              // A contract that promises a signature which no longer exists
+              // is worse than no contract: the agent will confidently call it.
+              let toRender = contract;
+              let warning = "";
+              try {
+                const index = await resolveCodeIndex({ root: REPO_ROOT });
+                const report = await checkContractValidity(contract, index);
+                warning = formatValidityWarning(report);
+                if (report.status === "drifted") {
+                  // Re-deriving is one more adapter call, so drift is
+                  // recoverable rather than merely detectable. The downstream
+                  // task gets today's signatures plus a note about what moved.
+                  toRender = await rederiveContract(contract, index, {
+                    baseSha: gitHeadSha(REPO_ROOT),
+                  });
+                }
+              } catch (err) {
+                console.warn(`[knowledge] validity check failed: ${err instanceof Error ? err.message : String(err)}`);
+              }
+              if (warning) lines.push(warning);
               lines.push("```");
-              lines.push(renderContract(contract));
+              lines.push(renderContract(toRender));
               lines.push("```");
             } else {
               lines.push(r.body.trim());

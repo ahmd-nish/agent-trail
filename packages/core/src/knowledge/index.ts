@@ -22,6 +22,14 @@ export type {
   EdgeKind, GoverningHit, GoverningOptions, KnowledgeEdge,
   NewKnowledgeEdge, ProvenanceLink,
 } from "./edges.ts";
+// §4.2e — git as the validity oracle. Staleness is derived, never recorded.
+export {
+  checkContractValidity, formatValidityWarning, gitHeadSha, hashEntries,
+  rederiveContract, resolveSignatureSet,
+} from "./validity.ts";
+export type { SignatureSet, ValidityReport, ValidityStatus } from "./validity.ts";
+export { hooksDir, installPostMergeHook, uninstallPostMergeHook } from "./hooks.ts";
+export type { HookInstallResult } from "./hooks.ts";
 export type { CodeIndexBenchOptions, CodeIndexBenchReport } from "./code-index-bench.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";

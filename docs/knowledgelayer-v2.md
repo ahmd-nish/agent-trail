@@ -327,16 +327,60 @@ Apply §4.2d Decision 3 without exception: **traverse to rank, then let a hard b
 
 §4.2e as originally written, with the adapter supplying signatures instead of a tree-sitter pass agent-trail owns.
 
-- [ ] Persist `base_sha` on every contract at emit time. The field already exists (`contracts.ts:24,80`) and is populated; nothing computes against it yet.
-- [ ] Compute `signature_hash = sha256(sorted(exports ∪ routes ∪ tables ∪ env))` from the adapter's output, not from the regex extractor, and store it beside `base_sha`.
-- [ ] At pack time: re-resolve signatures for `contract.paths` through the adapter, recompute the hash, compare. Equal → still valid despite file edits. Different → drifted, and you know exactly which symbols moved.
-- [ ] Re-derive structure automatically on drift (free — it is one more adapter call). Leave `invariants` / `deliberatelyNotDone` empty rather than guessing; they are currently hardcoded `[]` at `contracts.ts:89-90` and a wrong invariant is worse than a missing one.
-- [ ] `post-merge` hook that precomputes the answer. **Optimization only.** Correctness stays pull-based, so a fresh clone or an uninstalled hook still yields the right result.
-- [ ] Commit trailers (`Agent-Trail-Contract: <id>`), not `git notes` — trailers survive rebase and cherry-pick and push by default.
+- [x] Persist `base_sha` on every contract at emit time. The field already exists (`contracts.ts:24,80`) and is populated; nothing computes against it yet.
+- [x] Compute `signature_hash = sha256(sorted(exports ∪ routes ∪ tables ∪ env))` from the adapter's output, not from the regex extractor, and store it beside `base_sha`.
+- [x] At pack time: re-resolve signatures for `contract.paths` through the adapter, recompute the hash, compare. Equal → still valid despite file edits. Different → drifted, and you know exactly which symbols moved.
+- [x] Re-derive structure automatically on drift (free — it is one more adapter call). Leave `invariants` / `deliberatelyNotDone` empty rather than guessing; they are currently hardcoded `[]` at `contracts.ts:89-90` and a wrong invariant is worse than a missing one.
+- [x] `post-merge` hook that precomputes the answer. **Optimization only.** Correctness stays pull-based, so a fresh clone or an uninstalled hook still yields the right result.
+- [x] Commit trailers (`Agent-Trail-Contract: <id>`), not `git notes` — trailers survive rebase and cherry-pick and push by default.
 
 One correction to the original §4.3 scoring formula: it contains `× 0 if superseded_by IS NOT NULL OR contract.stale`. Until this phase lands, `contract.stale` is unimplementable, so retrieval is structurally incapable of excluding a stale contract. That term becomes real here.
 
 **Exit criteria:** edit a signature outside agent-trail, and the next pack marks the contract drifted and ships re-derived signatures.
+
+> **DONE 2026-08-08.** Exit criteria met end-to-end on a real git repo: emit a contract,
+> hand-edit + commit a signature change outside agent-trail, and the next pack reports
+> `drifted`, names the exact symbols, and ships re-derived signatures.
+>
+> ```
+> emitted at 71809d58 · status: valid
+> status after outside edit: drifted
+>   ⚠ CONTRACT DRIFTED since it was recorded at 71809d58
+>     signature changed: sym:src/session.ts#createSession
+>     no longer exists:  sym:src/session.ts#verifySession
+> re-derived status: valid
+> ```
+>
+> - **`baseSha` was never populated.** `extractContract({ taskId, files })` omitted it, so
+>   every contract shipped to date had `baseSha: null`. Now stamped from the worktree HEAD
+>   at emit, alongside `signatureHash` + `signatureEntries`.
+> - **Three states, not two.** `valid` / `drifted` / **`unknown`**. A contract with no
+>   recorded hash (everything emitted before this phase), or one whose adapter resolved
+>   nothing (language server down), reports `unknown` — never `valid`. Degrading to
+>   "cannot tell" is correct; degrading to "fine" is the false negative that destroys trust.
+> - **Drift names the symbol.** "Something changed" is not actionable; `createSession's
+>   signature changed` is. Diffed into `changed` / `removed` / `added`.
+> - **A comment-only edit does not drift a contract** — staleness tracks the API surface,
+>   not the bytes. Otherwise every reformat invalidates everything and the signal is worthless.
+> - **The hash covers exported symbols only.** `routes` / `tables` / `env` are in the
+>   contract but no CodeIndex backend exposes them, so folding them in would make the hash
+>   reproducible on `native` alone — it would be measuring the extractor, not the code.
+> - **`invariants` / `deliberatelyNotDone` are never regenerated on re-derive.** They were
+>   judgements about the original code; a wrong invariant is worse than a missing one.
+> - **Commit trailers, not git notes** (`Agent-Trail-Contract: <id>`) — trailers survive
+>   rebase and cherry-pick and push by default, which is exactly the mutation set this
+>   section exists to survive.
+> - **`post-merge` hook is an optimization only.** `agent-trail knowledge install-hook`
+>   writes it; it refuses to clobber a hook it did not author, honours `core.hooksPath`,
+>   and every failure path exits 0 so it can never block a merge. Correctness stays
+>   pull-based — a fresh clone gets the same answer, just milliseconds later.
+> - **New CLI:** `agent-trail knowledge revalidate [--quiet]` rechecks every active
+>   contract and reports valid / drifted / unverifiable.
+>
+> Fixed while verifying: a single-line function carried its whole BODY into the contract
+> (`function f(a): string { return a; }`). Contracts are signatures — a body is the file
+> content §4.2b rule 4 says never to ship. `stripFunctionBody()` cuts it while preserving
+> object return types (`): { id: string }`).
 
 ---
 

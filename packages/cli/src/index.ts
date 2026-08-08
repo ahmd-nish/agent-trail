@@ -843,8 +843,63 @@ async function cmdKnowledge(args: string[]) {
         }
         return;
       }
+      case "revalidate": {
+        // §4.2e — recheck every capability contract against the working tree.
+        // Called by the post-merge hook, but the answer is identical whether
+        // or not the hook ever ran: validity is DERIVED at pack time too.
+        // This only warms the answer.
+        const quiet = args.includes("--quiet");
+        const { resolveCodeIndex } = await import("../../core/src/knowledge/code-index.ts");
+        const { checkContractValidity } = await import("../../core/src/knowledge/validity.ts");
+        const root = process.cwd();
+        const index = await resolveCodeIndex({ root });
+        const rows = db.query(
+          "SELECT id, subject, body FROM knowledge_events WHERE type = 'artifact_summary' AND superseded_by IS NULL",
+        ).all() as Array<{ id: string; subject: string; body: string }>;
+
+        let valid = 0, drifted = 0, unknown = 0, skipped = 0;
+        const drift: string[] = [];
+        for (const r of rows) {
+          let contract: import("../../core/src/knowledge/contracts.ts").CapabilityContract | null = null;
+          try {
+            const parsed = JSON.parse(r.body);
+            if (parsed?.type === "capability_contract") contract = parsed;
+          } catch { /* prose body */ }
+          if (!contract) { skipped++; continue; }
+          const report = await checkContractValidity(contract, index);
+          if (report.status === "valid") valid++;
+          else if (report.status === "drifted") {
+            drifted++;
+            drift.push(`  ${c.amber("~")} ${r.subject}`);
+            for (const k of report.changed) drift.push(`      ${c.dim("changed")}  ${k}`);
+            for (const k of report.removed) drift.push(`      ${c.dim("removed")}  ${k}`);
+          } else unknown++;
+        }
+
+        if (quiet) return;
+        console.log(`${c.bold("contract validity")}  ${c.green(String(valid) + " valid")} · ${c.amber(String(drifted) + " drifted")} · ${c.dim(String(unknown) + " unverifiable")} · ${c.dim(String(skipped) + " prose")}`);
+        if (drift.length) { console.log(""); for (const l of drift) console.log(l); }
+        if (unknown > 0) {
+          console.log("");
+          console.log(c.dim("  unverifiable = emitted before signature hashing, or the code index could not resolve the files."));
+          console.log(c.dim("  These are reported as unknown, never as valid."));
+        }
+        return;
+      }
+      case "install-hook": {
+        const { installPostMergeHook } = await import("../../core/src/knowledge/hooks.ts");
+        const res = installPostMergeHook(process.cwd(), { force: args.includes("--force") });
+        if (res.installed) {
+          console.log(`${c.green("+")} post-merge hook ${res.reason} ${c.dim(res.path ?? "")}`);
+          console.log(c.dim("  Optimization only — contract validity is derived at pack time regardless."));
+        } else {
+          console.error(`${c.red("✗")} ${res.reason}`);
+          process.exit(1);
+        }
+        return;
+      }
       default:
-        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage`);
+        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate`);
         process.exit(sub ? 1 : 0);
     }
   } finally {

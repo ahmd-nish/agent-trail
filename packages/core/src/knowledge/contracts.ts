@@ -33,6 +33,15 @@ export interface CapabilityContract {
   invariants: string[];
   deliberatelyNotDone: string[];
   entrypoints: string[];
+  /** §4.2e — sha256 over the sorted signature set, resolved through the active
+   *  CodeIndex at emit time. Staleness is DERIVED by recomputing this and
+   *  comparing; it is never recorded as a boolean, because a `stale` flag is
+   *  wrong the moment anyone rebases. Optional so contracts emitted before
+   *  Phase 3 still parse — they report validity `unknown`, never `valid`. */
+  signatureHash?: string;
+  /** The exact entries the hash was taken over, so drift can name WHICH
+   *  symbol moved rather than only that something did. */
+  signatureEntries?: string[];
 }
 
 export interface ExtractContractInput {
@@ -121,6 +130,44 @@ export function renderContract(contract: CapabilityContract): string {
     for (const d of contract.deliberatelyNotDone) lines.push(`  - ${d}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * Cut a one-line function body off a signature.
+ *
+ * `collectSignature` stops at the first terminator, so a single-line function
+ * (`export function f(a: string): string { return a; }`) carries its whole body
+ * into the contract. Contracts are signatures — a body is exactly the file
+ * content §4.2b rule 4 says never to ship, and it wastes the body budget.
+ *
+ * Skips a `{` that opens an object RETURN TYPE (`): { id: string } {`) by
+ * looking at the preceding non-space character: a return-type brace follows
+ * `:` or `=>`, a body brace follows `)` or an identifier.
+ */
+export function stripFunctionBody(sig: string): string {
+  const open = sig.indexOf("(");
+  if (open < 0) return sig.trim();
+
+  // Walk to the close of the parameter list.
+  let depth = 0;
+  let closeParen = -1;
+  for (let i = open; i < sig.length; i++) {
+    const ch = sig[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") { depth--; if (depth === 0) { closeParen = i; break; } }
+  }
+  if (closeParen < 0) return sig.trim();
+
+  for (let i = closeParen + 1; i < sig.length; i++) {
+    if (sig[i] !== "{") continue;
+    let j = i - 1;
+    while (j >= 0 && /\s/.test(sig[j] as string)) j--;
+    const prev = sig[j];
+    // `: {` and `=> {` introduce a type, not a body.
+    if (prev === ":" || (prev === ">" && sig[j - 1] === "=")) continue;
+    return sig.slice(0, i).trimEnd();
+  }
+  return sig.trim();
 }
 
 /** Drop a line comment and a trailing semicolon, then trim. */
@@ -247,7 +294,7 @@ function extractExportsTS(content: string): ExportSig[] {
     if (fn) {
       const symbol = fn[1] as string;
       const signature = collectSignature(lines, i, ")", ":", "{").trim();
-      const clean = signature.replace(/\s+/g, " ").replace(/\s*\{\s*$/, "");
+      const clean = stripFunctionBody(signature.replace(/\s+/g, " ").replace(/\s*\{\s*$/, ""));
       out.push({ symbol, signature: clean.replace(/^export\s+/, ""), kind: "function", line: i + 1 });
       continue;
     }
