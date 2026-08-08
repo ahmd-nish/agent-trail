@@ -287,6 +287,40 @@ Apply §4.2d Decision 3 without exception: **traverse to rank, then let a hard b
 
 **Exit criteria:** Q1 and Q2 run in the packer, a test proves a second task inherits a first task's ruling via a `sym:` edge rather than a path string match, and p99 stays under 200ms.
 
+> **DONE 2026-08-08.** All three exit criteria met. Migration v26, `edges.ts`, 20 tests.
+>
+> **One design correction, caught by the tests.** The first cut emitted `governs` edges to
+> the file *and every ancestor module* on write. That is wrong: it makes a fact about
+> `src/api.ts` claim to govern every sibling under `src/`, and it showed up immediately as
+> two unrelated files matching each other. The expansion belongs on the **read** side only:
+>
+> - `leafUrn(path)` — WRITE. One edge: `file:` for a file, `module:` for a directory.
+> - `pathUrns(path)` — READ. The path plus every ancestor module.
+>
+> The asymmetry is the point. Expanding on write makes a fact about one file over-claim
+> across its directory; expanding on read makes a directory-scoped ruling reach the files
+> inside it. Only the second is true.
+>
+> **Latency, measured at 5,000 events / 5,971 edges / 202 files:**
+>
+> | Query | p50 | p99 | Gate |
+> |---|---|---|---|
+> | Q1 `knowledgeGoverning` | 2.76ms | **4.32ms** | <200ms ✓ |
+> | Q2 `blastRadius` | 15.13ms | **139.74ms** | <200ms ✓ |
+>
+> Q2 initially measured **200.52ms p99 — a fail**. Cause: `whoCalls` re-read every file in
+> the repo once *per symbol*, so a module with 20 exports triggered 20 full scans. Fixed
+> with an mtime-keyed content cache in `NativeCodeIndex` plus a `maxSymbolsExpanded` cap
+> (default 25) on traversal breadth — §4.2d Decision 3, and the cap logs what it dropped
+> rather than letting a bounded answer read as exhaustive.
+>
+> Note the headroom is thin *because* the control's `whoCalls` is a full-repo text scan
+> with no index. This is the one place where an external backend has a concrete argument,
+> and it is worth re-measuring §3.4 against if Q2 ever moves onto a hot path.
+>
+> **Live in the packer** — a real spawn now assembles:
+> `L0 constitution · L1 pack · upstream handoffs · related knowledge · **Knowledge graph (§J)** · governance warnings`.
+
 ---
 
 ## 5. Phase 3 — the validity oracle, now unblocked (2 days)

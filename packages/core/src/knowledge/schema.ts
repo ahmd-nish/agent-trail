@@ -47,6 +47,35 @@ export const KNOWLEDGE_EVENTS_INDEXES = [
 // embedding pipeline (nomic-embed-text 256d Matryoshka) is in place;
 // until then FTS5 alone is dramatically better than LIKE, and it's
 // available with zero extra dependencies on bun:sqlite.
+// §J — the join. Asserted edges only: claims about which knowledge applies to
+// which code. The DERIVED code graph (symbols, call edges) deliberately has no
+// table here — an external index owns it, it rebuilds in minutes, and it is
+// never synced. This table is the small, precious half that cannot be
+// regenerated if lost, so it is append-only and syncs like the event log.
+export const KNOWLEDGE_EDGES_DDL = `
+CREATE TABLE IF NOT EXISTS knowledge_edges (
+  id            TEXT PRIMARY KEY,
+  workspace_id  TEXT NOT NULL DEFAULT 'local',
+  project_id    TEXT NOT NULL DEFAULT 'local',
+  src           TEXT NOT NULL,
+  dst           TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  weight        REAL NOT NULL DEFAULT 1.0,
+  resolver      TEXT NOT NULL,
+  content_hash  TEXT NOT NULL,
+  created_at    TEXT NOT NULL
+);
+`;
+
+export const KNOWLEDGE_EDGES_INDEXES = [
+  // Q1's access path: "what governs these URNs". The hot one.
+  "CREATE INDEX IF NOT EXISTS idx_kedge_dst ON knowledge_edges(dst, kind)",
+  // Q3 walks outward from an event.
+  "CREATE INDEX IF NOT EXISTS idx_kedge_src ON knowledge_edges(src, kind)",
+  // Grow-only: re-running the emitter must not duplicate an edge.
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_kedge_hash ON knowledge_edges(workspace_id, project_id, content_hash)",
+];
+
 export const KNOWLEDGE_EVENTS_FTS = `
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_events_fts USING fts5(
   subject,

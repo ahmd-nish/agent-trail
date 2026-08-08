@@ -18,6 +18,24 @@ import { loadConstitution } from "../../core/src/context/store.ts";
 import { foldConstitution } from "../../core/src/knowledge/fold.ts";
 import { buildRiskIndex, formatRiskWarnings } from "../../core/src/knowledge/risk.ts";
 import { search as searchKnowledge } from "../../core/src/knowledge/search.ts";
+import { blastRadius, formatGoverningHits, resolveSymbolEdges } from "../../core/src/knowledge/edges.ts";
+import { resolveCodeIndex } from "../../core/src/knowledge/code-index.ts";
+
+// §J step 3 — resolve `sym:` edges for an event's file footprint. Kept out of
+// append() on purpose: append is synchronous and sits on the write path of
+// every execution, and a symbol resolution that hangs must not stall an event
+// write. Swallows everything — an edge is an optimization, the event is the
+// record.
+async function resolveSymbolEdgesFor(
+  db: ReturnType<typeof getDb>,
+  event: Parameters<typeof resolveSymbolEdges>[1],
+): Promise<void> {
+  try {
+    if (!event?.paths?.length) return;
+    const index = await resolveCodeIndex({ root: REPO_ROOT });
+    await resolveSymbolEdges(db, event, index);
+  } catch { /* best-effort by design */ }
+}
 import { renderContract, type CapabilityContract } from "../../core/src/knowledge/contracts.ts";
 import { buildHeuristicMemory, buildL1Pack, writeTaskMemory } from "../../core/src/context/memory.ts";
 import { rankRelevantFiles } from "../../core/src/context/repo-map.ts";
@@ -305,7 +323,7 @@ class ExecutionManager {
   // terminal execution. Downstream DAG tasks pick this up via buildL1Pack
   // (see the L0+L1 concat above). Best-effort — filesystem hiccups log a
   // warning but never fail the run that just succeeded.
-  private _persistTaskMemory(taskId: string, completedAt: string): void {
+  private async _persistTaskMemory(taskId: string, completedAt: string): Promise<void> {
     try {
       const db = getDb();
       const task = db
@@ -381,7 +399,7 @@ class ExecutionManager {
       }
 
       try {
-        appendKnowledge(db, {
+        const ev = appendKnowledge(db, {
           workspaceId: "local",
           projectId: basename(REPO_ROOT) || "local",
           actorKind: "agent",
@@ -397,6 +415,12 @@ class ExecutionManager {
           confidence: "observed",
           supersedes: null,
         });
+        // §J step 3 — resolve sym: edges for the files this task touched.
+        // This is the only await in _persistTaskMemory, and it is last: every
+        // synchronous DB write above completes inline before control yields,
+        // so callers using `void this._persistTaskMemory(...)` still get the
+        // event persisted in order. Only the symbol resolution defers.
+        await resolveSymbolEdgesFor(db, ev.event);
       } catch (err) {
         console.warn(`[knowledge] artifact_summary event failed: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -936,7 +960,7 @@ class ExecutionManager {
 
         // §D — write the task memory once verify_tests goes green. Downstream
         // DAG tasks will read this on their next spawn (see buildL1Pack above).
-        if (result.passed) this._persistTaskMemory(taskId, finishedAt);
+        if (result.passed) void this._persistTaskMemory(taskId, finishedAt);
 
         this.broadcast(taskId, { type: "execution_complete", status, executionId });
         this.closeAll(taskId);
@@ -1027,7 +1051,7 @@ class ExecutionManager {
       // handler above so the summary reflects the code that shipped, not just
       // the failing tests written first.
       if (effectiveStatus === "completed" && nextTaskStatus === "in_review") {
-        this._persistTaskMemory(taskId, finishedAt);
+        void this._persistTaskMemory(taskId, finishedAt);
       }
 
       const broadcastStatus = effectiveStatus === "awaiting_human" ? "failed" : effectiveStatus;
@@ -1148,6 +1172,30 @@ class ExecutionManager {
       console.warn(`[knowledge] precheck at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
     }
 
+    // knowledgelayer-v2 §J — the join. Q1 (what governs these files) plus Q2
+    // (blast radius: knowledge attached to the CALLERS of the symbols this
+    // task is about to change). Structural seeding, not similarity — it finds
+    // rulings whose text has nothing in common with the task description.
+    //
+    // Q2 is the query no single tool in the market answers: the code graph
+    // supplies structural reach, the knowledge graph supplies the rulings and
+    // prior failures that apply to it. Fail-soft: any adapter or DB problem
+    // degrades to Q1, and Q1's absence degrades to an empty block.
+    let joinBlock = "";
+    try {
+      const touchPaths = [...new Set([...(task.likelyPaths ?? []), ...relevantFiles])];
+      if (touchPaths.length > 0) {
+        const codeIndex = await resolveCodeIndex({ root: REPO_ROOT });
+        const hits = (await blastRadius(db, touchPaths, codeIndex, { limit: 8 }))
+          // A task's own events are not news to it.
+          .filter((h) => h.event.taskId !== task.id);
+        const rendered = formatGoverningHits(hits);
+        if (rendered) joinBlock = `## Knowledge graph (§J)\n\n${rendered}`;
+      }
+    } catch (err) {
+      console.warn(`[knowledge] §J join at spawn failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     // knowledgelayer §4.3 — retrieval on plan. Top-3 semantically-similar
     // knowledge events for this task's title+description. FTS5 + confidence
     // weighting; vector kNN is deferred. This is how the task pack picks up
@@ -1229,6 +1277,7 @@ class ExecutionManager {
       l1.content ? `## Task pack (L1)\n\n${l1.content}` : "",
       depSummariesBlock,
       relatedBlock,
+      joinBlock,
       bandD ? `## Governance warnings (Band D)\n\n${bandD}` : "",
     ]
       .filter(Boolean)

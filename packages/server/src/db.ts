@@ -5,6 +5,8 @@ import type { Board, Task, TaskStatus, Priority, AgentKind, TddPhase, ReviewKind
 import { DEFAULT_PERMISSION_MODE, DEFAULT_EXECUTION_TIMEOUT_MS } from "../../core/src/types/index.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
 import {
+  KNOWLEDGE_EDGES_DDL,
+  KNOWLEDGE_EDGES_INDEXES,
   KNOWLEDGE_EVENTS_DDL,
   KNOWLEDGE_EVENTS_FTS,
   KNOWLEDGE_EVENTS_FTS_TRIGGERS,
@@ -431,6 +433,16 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
       if (!columnExists(db, "executions", "cache_creation_input_tokens")) {
         db.exec("ALTER TABLE executions ADD COLUMN cache_creation_input_tokens INTEGER");
       }
+    },
+  },
+  {
+    version: 26,
+    description: "knowledgelayer-v2 §J — knowledge_edges (asserted knowledge->code join)",
+    up: (db) => {
+      // Asserted edges only. The derived code graph is owned by the active
+      // CodeIndex adapter, rebuilds in minutes, and is never synced.
+      db.exec(KNOWLEDGE_EDGES_DDL);
+      for (const sql of KNOWLEDGE_EDGES_INDEXES) db.exec(sql);
     },
   },
 ];

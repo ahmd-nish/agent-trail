@@ -98,15 +98,39 @@ export function parseUrn(urn: string): ParsedUrn | null {
   return null;
 }
 
-/** Every URN a path should be joinable by: the file itself plus each ancestor
- *  directory as a module. Used by §J so a `module:packages/core` ruling reaches
- *  a task touching `packages/core/src/auth/session.ts`. */
+/** True when the last segment looks like a filename rather than a directory. */
+function looksLikeFile(p: string): boolean {
+  const leaf = p.split("/").pop() ?? "";
+  return /\.[A-Za-z0-9]+$/.test(leaf);
+}
+
+/**
+ * The single URN a path IS — used on the WRITE side. A fact recorded against
+ * `src/api.ts` asserts something about that file and nothing else; a fact
+ * recorded against `packages/core` asserts something about that module.
+ */
+export function leafUrn(path: string): string {
+  const p = toPosixPath(path);
+  return looksLikeFile(p) ? fileUrn(p) : moduleUrn(p);
+}
+
+/**
+ * Every URN a path can be joined BY — used on the READ side. The path itself
+ * plus each ancestor directory as a module, so a `module:packages/core` ruling
+ * reaches a task touching `packages/core/src/auth/session.ts`.
+ *
+ * The asymmetry with leafUrn() is deliberate and load-bearing. Expanding on
+ * write would make a fact about one file claim to govern every sibling under
+ * its directory; expanding on read makes a directory-scoped ruling reach the
+ * files inside it. Only the second is true.
+ */
 export function pathUrns(path: string): string[] {
   const p = toPosixPath(path);
-  const out = [fileUrn(p)];
+  const out = [leafUrn(p)];
   const parts = p.split("/");
   for (let i = parts.length - 1; i > 0; i--) {
-    out.push(moduleUrn(parts.slice(0, i).join("/")));
+    const anc = moduleUrn(parts.slice(0, i).join("/"));
+    if (!out.includes(anc)) out.push(anc);
   }
   return out;
 }
@@ -267,9 +291,27 @@ export class NativeCodeIndex implements CodeIndex {
     }
   }
 
+  /**
+   * mtime-keyed content cache. Without it `whoCalls` re-reads every file in the
+   * repo once PER SYMBOL, so a module with 20 exports triggers 20 full scans —
+   * measured at a Q2 p99 of 200ms on this repo, right at the §3.4 gate. Bounded
+   * so a very large repo cannot grow it without limit.
+   */
+  private contents = new Map<string, { mtimeMs: number; text: string }>();
+
   private read(rel: string): string | null {
+    const abs = join(this.root, rel);
+    let mtimeMs = 0;
+    try { mtimeMs = statSync(abs).mtimeMs; } catch { return null; }
+
+    const hit = this.contents.get(rel);
+    if (hit && hit.mtimeMs === mtimeMs) return hit.text;
+
     try {
-      return readFileSync(join(this.root, rel), "utf8");
+      const text = readFileSync(abs, "utf8");
+      if (this.contents.size >= this.maxFiles) this.contents.clear();
+      this.contents.set(rel, { mtimeMs, text });
+      return text;
     } catch {
       return null;
     }

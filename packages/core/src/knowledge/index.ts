@@ -7,11 +7,21 @@ export { extractContract, extractFileSymbols, renderContract } from "./contracts
 export type { CapabilityContract, ExportKind, ExportSig, ExtractContractInput } from "./contracts.ts";
 // §3.1 — the code-index adapter seam. `native` is always available (rule 2).
 export {
-  NativeCodeIndex, fileUrn, moduleUrn, parseUrn, pathUrns,
+  NativeCodeIndex, fileUrn, leafUrn, moduleUrn, parseUrn, pathUrns,
   resolveCodeIndex, symbolUrn, toPosixPath,
 } from "./code-index.ts";
 export type { CodeIndex, NativeCodeIndexOptions, ParsedUrn, SymbolKind, SymbolRef } from "./code-index.ts";
 export { changedFileCorpus, formatBenchReport, runCodeIndexBench } from "./code-index-bench.ts";
+// §J — the join between asserted knowledge and derived code structure.
+export {
+  appendEdge, blastRadius, emitContractEdges, emitPathEdges, eventUrn,
+  formatGoverningHits, hasEdgeTable, hashEdge, knowledgeGoverning,
+  provenanceChain, resolveSymbolEdges,
+} from "./edges.ts";
+export type {
+  EdgeKind, GoverningHit, GoverningOptions, KnowledgeEdge,
+  NewKnowledgeEdge, ProvenanceLink,
+} from "./edges.ts";
 export type { CodeIndexBenchOptions, CodeIndexBenchReport } from "./code-index-bench.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";
@@ -32,6 +42,8 @@ export { redact } from "./redact.ts";
 export type { RedactResult } from "./redact.ts";
 export { isUlid, ulid, ulidTime } from "./ulid.ts";
 export {
+  KNOWLEDGE_EDGES_DDL,
+  KNOWLEDGE_EDGES_INDEXES,
   KNOWLEDGE_EVENTS_DDL,
   KNOWLEDGE_EVENTS_FTS,
   KNOWLEDGE_EVENTS_FTS_TRIGGERS,

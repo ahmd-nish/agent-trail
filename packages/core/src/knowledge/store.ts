@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
+import { emitContractEdges, emitPathEdges } from "./edges.ts";
 import { redact } from "./redact.ts";
 import type { EventType, KnowledgeEvent, NewKnowledgeEvent, Scope } from "./types.ts";
 import { bodyCapFor } from "./types.ts";
@@ -96,6 +97,14 @@ export function append(db: Database, input: NewKnowledgeEvent, opts: AppendOptio
       event.supersededBy, event.contentHash, event.createdAt,
     );
 
+    // §J auto-population — nobody types anything, and the graph is current
+    // within one task of the work that changed it. Both calls are best-effort
+    // and swallow their own errors: an edge failure must never lose the event
+    // that caused it. Symbol edges are NOT resolved here — that needs an async
+    // adapter call and must not sit on the synchronous write path.
+    emitPathEdges(db, event);
+    emitContractEdges(db, event);
+
     // Close out the superseded ancestor if any. Temporal validity (§3.2 fix):
     // the old event still exists — we're just marking its validity window closed.
     if (event.supersedes) {
@@ -162,7 +171,7 @@ export function count(db: Database, filter: ListFilter = {}): number {
   return row.n;
 }
 
-interface RawRow {
+export interface RawRow {
   id: string; workspace_id: string; project_id: string;
   actor_kind: string; actor_id: string; actor_name: string;
   task_id: string | null; execution_id: string | null;
@@ -173,7 +182,9 @@ interface RawRow {
   content_hash: string; created_at: string;
 }
 
-function rowToEvent(row: RawRow): KnowledgeEvent {
+/** Exported for §J — edges.ts joins rows out of knowledge_events directly and
+ *  must map them identically, not with a second hand-rolled mapper. */
+export function rowToEvent(row: RawRow): KnowledgeEvent {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
