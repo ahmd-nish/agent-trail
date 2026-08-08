@@ -447,7 +447,7 @@ So the sync surface is the small, precious half. Nobody ships a GB index over th
 - [x] `GET /v1/events?since=<ulid>` — tail, returns next cursor.
 - [x] `GET /v1/events/stream?since=<ulid>` — SSE live tail.
 - [x] Local outbox on the SQLite mirror; on reconnect push unsent, pull from cursor. Append-only ⇒ no conflict resolution.
-- [ ] Workspace model + better-auth GitHub OAuth; replace `workspace_id` hardcoded to `'local'`.
+- [x] Workspace model + roles + hashed API tokens; `workspace_id` is now credential-derived. *(GitHub OAuth still pending — see below.)*
 - [x] `sync: local-only` per project, before anyone is charged (§5.2).
 
 Still explicitly **not** adopting ElectricSQL / PowerSync / Zero / LiveStore or any CRDT library. An append-only log needs a cursor, not a sync engine (§4.1 property 2).
@@ -474,15 +474,40 @@ Still explicitly **not** adopting ElectricSQL / PowerSync / Zero / LiveStore or 
 >
 > New: `agent-trail knowledge sync --remote <url>`.
 >
-> ### ⚠ What is NOT done — do not read this phase as finished
+> ### Relay identity — DONE 2026-08-08 (migration v29)
 >
-> - **Auth is a shared bearer token**, and that is all it is. Enough for a self-hosted
->   team relay; it is **not** identity. The §5.1 hosted tier needs better-auth + GitHub
->   OAuth and a real workspace/membership model — a shared secret must not be mistaken for
->   either. The relay refuses to start unguarded (disabled unless `AGENT_TRAIL_RELAY_TOKEN`
->   is set) so nobody stands one up by accident.
-> - **No workspace model.** `workspace_id` is still a string the client asserts. Anyone
->   holding the token can read or write any workspace on that relay.
+> The shared-secret model is gone. `workspace.ts` + 19 unit tests + 7 new relay-e2e
+> authorization tests.
+>
+> - **Per-user tokens, scoped to one workspace, with roles** (viewer / member / admin /
+>   owner). A viewer can read a team's knowledge without being able to inject rulings.
+> - **Tokens are never stored** — only `sha256(secret)`. The plaintext is shown once, at
+>   creation. A stolen database yields no usable credential.
+> - **Workspace scope is server-derived, never client-asserted.** This was the actual hole:
+>   the relay read `workspaceId` from the request *body* and believed it, so any token
+>   holder could write into any workspace. Now every row is stamped with the workspace the
+>   *token* is scoped to, and `?workspace=` on reads is ignored outright rather than
+>   validated — there is no code path where a caller's claim about scope can be believed.
+>   Both directions are pinned by tests.
+> - **Membership is re-checked per request**, and removing a member revokes their tokens
+>   for that workspace immediately rather than at next expiry.
+> - `AGENT_TRAIL_RELAY_TOKEN` survives as a single-workspace bootstrap secret, pinned to
+>   `AGENT_TRAIL_RELAY_WORKSPACE` and granted `member` — never `admin`. A secret in an env
+>   var can carry data; it can never grant a stranger access.
+> - New: `agent-trail workspace create|ls|member add|member rm|token create|token ls|token revoke`,
+>   and `GET /v1/workspace` / `POST|DELETE /v1/workspace/members`.
+>
+> **Found while building:** `parseToken` split on *every* underscore, but the secret half is
+> base64url — whose alphabet includes `_`. Roughly **half of all issued tokens** would have
+> failed to authenticate, intermittently, with an error blaming the client. Caught only
+> because a test issues 50 tokens rather than one.
+>
+> ### ⚠ Still NOT done
+>
+> - **GitHub OAuth / better-auth.** Identity is provisioned by an admin on the relay host
+>   (`workspace member add github:<id>`), not self-service. The `external_id` column is
+>   already shaped for it (`github:<numeric id>`, never the renameable login), so OAuth is
+>   an additive login flow rather than a schema change.
 > - **SSE live tail polls** (1s) instead of using LISTEN/NOTIFY — correct for SQLite and
 >   multi-process, but it is the SQLite-shaped answer, not the Postgres one (§4.7).
 > - **Presence, live session join, shared steering, decision-inbox UI** — all still unbuilt.

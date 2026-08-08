@@ -13,6 +13,7 @@ import {
   KNOWLEDGE_EVENTS_INDEXES,
 } from "../../core/src/knowledge/schema.ts";
 import { SYNC_STATE_DDL } from "../../core/src/knowledge/sync.ts";
+import { WORKSPACE_DDL, WORKSPACE_INDEXES } from "../../core/src/knowledge/workspace.ts";
 
 const schemaPath = join(import.meta.dir, "../../core/src/storage/schema.sql");
 
@@ -484,6 +485,17 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
       // unsent" is exactly "everything after the last id I pushed", which is
       // one string per remote.
       db.exec(SYNC_STATE_DDL);
+    },
+  },
+  {
+    version: 29,
+    description: "knowledgelayer §5.1 — workspaces, members, roles, hashed API tokens",
+    up: (db) => {
+      // Replaces the shared bearer token, which was never identity: any holder
+      // could read or write ANY workspace. Tokens are stored as sha256 of the
+      // secret half only — a stolen DB yields no usable credential.
+      db.exec(WORKSPACE_DDL);
+      for (const sql of WORKSPACE_INDEXES) db.exec(sql);
     },
   },
 ];

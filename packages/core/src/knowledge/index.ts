@@ -44,6 +44,16 @@ export {
   pendingPush, syncOnce, upsertSyncState,
 } from "./sync.ts";
 export type { SyncEnvelope, SyncOptions, SyncResult, SyncState } from "./sync.ts";
+// §5.1 — workspaces, membership, roles, hashed API tokens.
+export {
+  ROLES, WORKSPACE_DDL, WORKSPACE_INDEXES, addMember, authenticate, authorize,
+  bearerFrom, createToken, createWorkspace, ensureWorkspaceSchema, getRole,
+  listMembers, listTokens, removeMember, revokeToken, roleAtLeast,
+  statusForFailure, upsertUser,
+} from "./workspace.ts";
+export type {
+  AuthContext, AuthFailure, AuthResult, IssuedToken, Role, WorkspaceUser,
+} from "./workspace.ts";
 export type { CodeIndexBenchOptions, CodeIndexBenchReport } from "./code-index-bench.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";

@@ -83,6 +83,9 @@ switch (cmd) {
   case "knowledge":
     await cmdKnowledge(rest);
     break;
+  case "workspace":
+    await cmdWorkspace(rest);
+    break;
   default:
     printHelp();
     process.exit(rawCmd ? 1 : 0);
@@ -437,6 +440,7 @@ ${c.dim("Commands:")}
   ${c.bold("library")} add|new|ls|rm            Manage the team agent library (.agent-trail/library/agents/)
   ${c.bold("deploy")} --board <id> --target <n> Deploy a board via a configured target (human-gated by default)
   ${c.bold("knowledge")} backfill|ls|fold      Shared team knowledge log (docs/knowledgelayer.md)
+  ${c.bold("workspace")} create|member|token   Relay identity: workspaces, members, API tokens
   ${c.bold("status")}                          Show all boards and task counts
   ${c.bold("doctor")}                          Preflight checks (claude, git, ports, API key)
 
@@ -1166,4 +1170,122 @@ async function cmdResume(taskId: string | undefined) {
     process.exit(1);
   }
   console.log(body);
+}
+
+
+// ─── workspace ───────────────────────────────────────────────────────────────
+// knowledgelayer §5.1 — relay identity. Run on the RELAY HOST: these commands
+// write to the relay's own database, which is where membership lives.
+//
+//   agent-trail workspace create <id> <name>
+//   agent-trail workspace ls
+//   agent-trail workspace member add <workspaceId> <externalId> <displayName> [--role member]
+//   agent-trail workspace member rm  <workspaceId> <userId>
+//   agent-trail workspace token create <workspaceId> <externalId> [--label x] [--ttl-days 90]
+//   agent-trail workspace token ls <workspaceId>
+//   agent-trail workspace token revoke <tokenId>
+
+async function cmdWorkspace(args: string[]): Promise<void> {
+  const W = await import("../../core/src/knowledge/workspace.ts");
+  const { Database } = await import("bun:sqlite");
+  const { resolveDbPath } = await import("../../core/src/storage/paths.ts");
+  const db = new Database(resolveDbPath());
+  W.ensureWorkspaceSchema(db);
+
+  const sub = args[0];
+  try {
+    switch (sub) {
+      case "create": {
+        const id = args[1], name = args[2] ?? args[1];
+        if (!id) { console.error(`${c.red("✗")} usage: agent-trail workspace create <id> <name>`); process.exit(2); }
+        W.createWorkspace(db, { id, name: name! });
+        console.log(`${c.green("+")} workspace ${c.bold(id)} created`);
+        return;
+      }
+      case "ls": {
+        const rows = db.query("SELECT id, name, created_at FROM workspaces ORDER BY created_at").all() as Array<{ id: string; name: string; created_at: string }>;
+        if (!rows.length) { console.log(c.dim("(no workspaces — try `workspace create`)")); return; }
+        for (const r of rows) {
+          const members = W.listMembers(db, r.id);
+          console.log(`${c.bold(r.id)}  ${r.name}  ${c.dim(`${members.length} member(s)`)}`);
+          for (const m of members) console.log(`  ${c.dim("·")} ${m.displayName} ${c.dim(`(${m.externalId})`)} — ${m.role}`);
+        }
+        return;
+      }
+      case "member": {
+        const action = args[1];
+        if (action === "add") {
+          const [, , ws, externalId, displayName] = args;
+          if (!ws || !externalId || !displayName) {
+            console.error(`${c.red("✗")} usage: agent-trail workspace member add <workspaceId> <externalId> <displayName> [--role member]`);
+            console.error(c.dim("  externalId should be stable, e.g. github:12345 — never a renameable login."));
+            process.exit(2);
+          }
+          const role = (flagValue(args, "--role") ?? "member") as import("../../core/src/knowledge/workspace.ts").Role;
+          if (!W.ROLES.includes(role)) { console.error(`${c.red("✗")} role must be one of ${W.ROLES.join(", ")}`); process.exit(2); }
+          const user = W.upsertUser(db, { externalId, displayName });
+          W.addMember(db, ws, user.id, role);
+          console.log(`${c.green("+")} ${displayName} added to ${c.bold(ws)} as ${role} ${c.dim(`(user ${user.id})`)}`);
+          return;
+        }
+        if (action === "rm") {
+          const [, , ws, userId] = args;
+          if (!ws || !userId) { console.error(`${c.red("✗")} usage: agent-trail workspace member rm <workspaceId> <userId>`); process.exit(2); }
+          W.removeMember(db, ws, userId);
+          console.log(`${c.green("+")} removed ${userId} from ${ws} ${c.dim("(their tokens for this workspace were revoked)")}`);
+          return;
+        }
+        console.error(`${c.red("✗")} usage: agent-trail workspace member add|rm …`);
+        process.exit(2);
+        return;
+      }
+      case "token": {
+        const action = args[1];
+        if (action === "create") {
+          const [, , ws, externalId] = args;
+          if (!ws || !externalId) { console.error(`${c.red("✗")} usage: agent-trail workspace token create <workspaceId> <externalId> [--label x] [--ttl-days 90]`); process.exit(2); }
+          const userRow = db.query("SELECT id FROM workspace_users WHERE external_id = ?").get(externalId) as { id: string } | null;
+          if (!userRow) { console.error(`${c.red("✗")} no such user ${externalId} — add them with \`workspace member add\` first`); process.exit(1); }
+          if (!W.getRole(db, ws, userRow!.id)) { console.error(`${c.red("✗")} ${externalId} is not a member of ${ws}`); process.exit(1); }
+          const ttl = flagValue(args, "--ttl-days");
+          const issued = W.createToken(db, { userId: userRow!.id, workspaceId: ws, label: flagValue(args, "--label"), ttlDays: ttl ? Number(ttl) : undefined });
+          console.log(`${c.green("+")} token created for ${externalId} in ${c.bold(ws)}`);
+          console.log("");
+          console.log(`  ${c.bold(issued.token)}`);
+          console.log("");
+          // Only chance to see it — the database holds a hash, not this string.
+          console.log(c.amber("  Copy it now. It is stored hashed and cannot be shown again."));
+          if (issued.expiresAt) console.log(c.dim(`  expires ${issued.expiresAt}`));
+          return;
+        }
+        if (action === "ls") {
+          const ws = args[2];
+          if (!ws) { console.error(`${c.red("✗")} usage: agent-trail workspace token ls <workspaceId>`); process.exit(2); }
+          const rows = W.listTokens(db, ws);
+          if (!rows.length) { console.log(c.dim("(no tokens)")); return; }
+          for (const t of rows) {
+            const state = t.revokedAt ? c.red("revoked") : (t.expiresAt && Date.parse(t.expiresAt) <= Date.now() ? c.amber("expired") : c.green("active"));
+            console.log(`${t.id}  ${state}  ${t.label ?? c.dim("(no label)")}  ${c.dim(`last used ${t.lastUsedAt ?? "never"}`)}`);
+          }
+          return;
+        }
+        if (action === "revoke") {
+          const id = args[2];
+          if (!id) { console.error(`${c.red("✗")} usage: agent-trail workspace token revoke <tokenId>`); process.exit(2); }
+          console.log(W.revokeToken(db, id)
+            ? `${c.green("+")} token ${id} revoked`
+            : `${c.amber("~")} token ${id} was already revoked or does not exist`);
+          return;
+        }
+        console.error(`${c.red("✗")} usage: agent-trail workspace token create|ls|revoke …`);
+        process.exit(2);
+        return;
+      }
+      default:
+        console.log(`${c.bold("agent-trail workspace")}  ${c.dim("(run on the relay host)")}\n\nUsage:\n  ${c.bold("create")} <id> <name>\n  ${c.bold("ls")}\n  ${c.bold("member add")} <ws> <externalId> <displayName> [--role viewer|member|admin|owner]\n  ${c.bold("member rm")} <ws> <userId>\n  ${c.bold("token create")} <ws> <externalId> [--label x] [--ttl-days 90]\n  ${c.bold("token ls")} <ws>\n  ${c.bold("token revoke")} <tokenId>`);
+        process.exit(sub ? 1 : 0);
+    }
+  } finally {
+    db.close();
+  }
 }
