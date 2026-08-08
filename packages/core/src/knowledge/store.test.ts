@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES } from "./schema.ts";
 import { append, count, getById, hashEvent, list } from "./store.ts";
+import { BODY_CHAR_CAP } from "./types.ts";
 import type { NewKnowledgeEvent } from "./types.ts";
 
 function freshDb(): Database {
@@ -65,11 +66,11 @@ describe("append()", () => {
     expect(row?.body).not.toContain("sk-ant-");
   });
 
-  test("clamps body to the 1200-char cap", () => {
+  test("clamps body to BODY_CHAR_CAP", () => {
     const db = freshDb();
     const big = "x".repeat(5000);
     const { event } = append(db, baseEvent({ body: big }));
-    expect(event.body.length).toBeLessThanOrEqual(1200);
+    expect(event.body.length).toBeLessThanOrEqual(BODY_CHAR_CAP);
   });
 
   test("supersession — marks the older event as superseded_by the newer", () => {
