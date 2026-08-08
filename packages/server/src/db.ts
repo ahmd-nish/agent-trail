@@ -445,6 +445,36 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
       for (const sql of KNOWLEDGE_EDGES_INDEXES) db.exec(sql);
     },
   },
+  {
+    version: 27,
+    description: "tasks.updated_at strictly monotonic — fixes optimistic-locking collisions inside one millisecond",
+    up: (db) => {
+      // `updated_at` doubles as the optimistic-locking token for
+      // PATCH /tests/:taskId/cases/:caseId (PRD_TESTING T1.5). ISO-8601 has
+      // millisecond resolution, so two writes landing in the same millisecond
+      // produce an IDENTICAL token — and a stale-write check against it
+      // silently passes, clobbering the concurrent edit it exists to protect.
+      //
+      // Surfaced as a 1-in-5 "flaky" test. It was not flaky; it was a real
+      // race that only loses when the machine is fast enough.
+      //
+      // Enforced with a trigger rather than at each call site because
+      // `updated_at` is written from many places, and one missed writer
+      // reintroduces the bug invisibly. Terminates after one recursion:
+      // the inner UPDATE leaves NEW > OLD, so the WHEN clause is false.
+      db.exec(`
+        CREATE TRIGGER IF NOT EXISTS tasks_updated_at_monotonic
+        AFTER UPDATE ON tasks
+        FOR EACH ROW
+        WHEN NEW.updated_at <= OLD.updated_at
+        BEGIN
+          UPDATE tasks
+             SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', OLD.updated_at, '+0.001 seconds')
+           WHERE id = NEW.id;
+        END;
+      `);
+    },
+  },
 ];
 
 function columnExists(db: Database, table: string, column: string): boolean {

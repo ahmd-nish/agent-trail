@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { buildSystemPrompt } from "./system-prompt.ts";
+import { buildSystemPrompt, buildBandedSystemPrompt, ORG_PREAMBLE } from "./system-prompt.ts";
 import type { Task } from "../types/index.ts";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -48,7 +48,15 @@ describe("buildSystemPrompt — PRD 3.4 constitution injection", () => {
     expect(prompt).not.toContain("Team constitution");
   });
 
-  test("constitution appended after the phase section", () => {
+  test("§4.4 — the project constitution precedes the phase section", () => {
+    // ORDER INVERTED DELIBERATELY (knowledgelayer §4.4). This test previously
+    // asserted phase-before-constitution. That put per-task content at
+    // position 2 of every prompt, so the common prefix between two spawns
+    // ended after one line and nothing below it could ever be cache-reused.
+    //
+    // Phase discipline stays load-bearing by being LAST rather than second —
+    // the closest instruction to the task wins on recency, and it is no longer
+    // wedged into the middle of the cacheable region.
     const prompt = buildSystemPrompt(
       makeTask({ tddPhase: "write_tests" }),
       "Use bun, never npm.\nAll new code in TypeScript.",
@@ -56,11 +64,9 @@ describe("buildSystemPrompt — PRD 3.4 constitution injection", () => {
     expect(prompt).toContain("PHASE: write_tests");
     expect(prompt).toContain("## Team constitution");
     expect(prompt).toContain("Use bun, never npm.");
-    // Phase discipline must not be overridable by the constitution — it comes
-    // before, so its instructions are read first.
     const idxPhase = prompt.indexOf("PHASE: write_tests");
     const idxConstitution = prompt.indexOf("## Team constitution");
-    expect(idxPhase).toBeLessThan(idxConstitution);
+    expect(idxConstitution).toBeLessThan(idxPhase);
   });
 
   test("skills line still appears when constitution is present", () => {
@@ -70,5 +76,54 @@ describe("buildSystemPrompt — PRD 3.4 constitution injection", () => {
     );
     expect(prompt).toContain("Suggested skills: test-writer, tdd-implementer");
     expect(prompt).toContain("Ship small PRs.");
+  });
+});
+
+describe("§4.4 band stability — the property that makes caching possible", () => {
+  const CONSTITUTION = "Use bun, never npm.\nAll new code in TypeScript.";
+
+  test("two DIFFERENT tasks in the same project share a byte-identical stable prefix", () => {
+    // This is the whole point of the band split. If this ever fails, prefix
+    // caching is impossible regardless of who sets the breakpoints.
+    const a = buildBandedSystemPrompt(
+      makeTask({ id: "t-1", title: "add login", tddPhase: "write_tests", skills: ["auth"] }),
+      { project: CONSTITUTION, task: "task A specifics", governance: "warning A" },
+    );
+    const b = buildBandedSystemPrompt(
+      makeTask({ id: "t-2", title: "fix billing", tddPhase: "verify_tests", skills: ["stripe"] }),
+      { project: CONSTITUTION, task: "task B specifics", governance: "" },
+    );
+
+    const prefix = `${ORG_PREAMBLE}\n\n## Team constitution (project rulings + past decisions — inherit these)\n\n${CONSTITUTION}`;
+    expect(a.startsWith(prefix)).toBe(true);
+    expect(b.startsWith(prefix)).toBe(true);
+    // And the divergence begins only AFTER the stable region.
+    expect(a.slice(0, prefix.length)).toBe(b.slice(0, prefix.length));
+  });
+
+  test("no task-derived value leaks into the stable prefix", () => {
+    const prompt = buildBandedSystemPrompt(
+      makeTask({ id: "t-secret", title: "UNIQUE_TITLE_MARKER", tddPhase: "implement", skills: ["SKILL_MARKER"] }),
+      { project: CONSTITUTION, task: "TASK_BODY_MARKER" },
+    );
+    const prefixEnd = prompt.indexOf("TASK_BODY_MARKER");
+    const stable = prompt.slice(0, prefixEnd);
+    for (const marker of ["UNIQUE_TITLE_MARKER", "SKILL_MARKER", "PHASE: implement"]) {
+      expect(stable).not.toContain(marker);
+    }
+  });
+
+  test("governance is last so a warning is the final thing read", () => {
+    const prompt = buildBandedSystemPrompt(makeTask(), {
+      project: CONSTITUTION, task: "ctx", governance: "GOVERNANCE_TAIL",
+    });
+    expect(prompt.trimEnd().endsWith("GOVERNANCE_TAIL")).toBe(true);
+  });
+
+  test("an empty band vanishes rather than leaving an empty header", () => {
+    // An empty section still costs tokens AND still differs between spawns.
+    const prompt = buildBandedSystemPrompt(makeTask(), { project: "", task: "", governance: "" });
+    expect(prompt).not.toContain("Team constitution");
+    expect(prompt).not.toContain("\n\n\n");
   });
 });

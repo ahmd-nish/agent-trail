@@ -19,6 +19,7 @@ import { foldConstitution } from "../../core/src/knowledge/fold.ts";
 import { buildRiskIndex, formatRiskWarnings } from "../../core/src/knowledge/risk.ts";
 import { resolveSymbolEdges } from "../../core/src/knowledge/edges.ts";
 import { formatRetrievedFacts, retrieveForTask } from "../../core/src/knowledge/retrieval.ts";
+import { projectProjectMap } from "../../core/src/knowledge/projections.ts";
 import { resolveCodeIndex } from "../../core/src/knowledge/code-index.ts";
 import {
   checkContractValidity, formatValidityWarning, gitHeadSha, rederiveContract,
@@ -1291,15 +1292,36 @@ class ExecutionManager {
     // Bands A/B (cacheable) and C/D (per-spawn) will formalize this order
     // with explicit cache breakpoints; this is the same content in the
     // same order.
-    const constitution = [
-      constitutionText,
+    // knowledgelayer §4.4 — assemble in BANDS, not one blob.
+    //
+    // Band B must be byte-identical for every task in this project, so nothing
+    // task-derived may enter it. Module briefs are the one judgement call:
+    // a brief for the task's own directory is project-stable content, but
+    // WHICH brief is task-derived — so including it would break the shared
+    // prefix across tasks in different directories. All briefs would be stable
+    // but wasteful. We include only the PROJECT_MAP plus the constitution, and
+    // let §J retrieval deliver directory-specific knowledge in Band C where it
+    // belongs.
+    let projectMapBlock = "";
+    try {
+      const map = projectProjectMap(REPO_ROOT);
+      if (map.stack.length || map.topDirs.length) {
+        projectMapBlock = `## Project map\n\n${map.markdown.trim()}`;
+      }
+    } catch (err) {
+      console.warn(`[knowledge] project map failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const bandB = [constitutionText, projectMapBlock].filter(Boolean).join("\n\n");
+    const bandC = [
       l1.content ? `## Task pack (L1)\n\n${l1.content}` : "",
       depSummariesBlock,
       relatedBlock,
-      bandD ? `## Governance warnings (Band D)\n\n${bandD}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    ].filter(Boolean).join("\n\n");
+    const bandDBlock = bandD ? `## Governance warnings (Band D)\n\n${bandD}` : "";
+
+    // Kept for the executions row + the adapter's legacy single-blob path.
+    const constitution = [bandB, bandC, bandDBlock].filter(Boolean).join("\n\n");
 
     // Persist the resolved prompt on the executions row. Gives replay / audit
     // / benchmarking a stable observable (previously null even though the
@@ -1320,6 +1342,9 @@ class ExecutionManager {
       timeoutMs: executionTimeoutMs,
       resumeSessionId: resume?.resumeSessionId,
       constitution,
+      // §4.4 — bands win over the blob. Band B carries only project-stable
+      // content so two tasks in this project share a byte-identical prefix.
+      bands: { project: bandB, task: bandC, governance: bandDBlock },
       callbacks: {
         onEvent: (raw, parsed) => {
           // PRD_OPEN_SOURCE 2.2 — capture claude session_id as soon as it

@@ -4,7 +4,7 @@ import type { Task, PermissionMode } from "../types/index.ts";
 import type { StreamEvent, StreamResultEvent } from "../types/stream-json.ts";
 import { resolveModel } from "../planner/models.ts";
 import { registerAdapter } from "./agent-adapter.ts";
-import { buildSystemPrompt } from "./system-prompt.ts";
+import { buildBandedSystemPrompt, buildSystemPrompt, type SystemPromptBands } from "./system-prompt.ts";
 
 export interface AdapterCallbacks {
   onEvent(raw: string, parsed: StreamEvent): void;
@@ -50,10 +50,16 @@ export interface SpawnOpts {
   /** PRD_OPEN_SOURCE 3.4 — the L0 team constitution (CLAUDE.md + context files),
    *  loaded and capped by the caller so this adapter stays filesystem-free. */
   constitution?: string;
+  /** knowledgelayer §4.4 — banded assembly. When present this WINS over
+   *  `constitution`: bands A+B form a byte-stable prefix across every spawn in
+   *  a project, which is the precondition for any prefix cache to hit. */
+  bands?: SystemPromptBands;
   callbacks: AdapterCallbacks;
 }
 
-export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionMode, timeoutMs, resumeSessionId, constitution, callbacks }: SpawnOpts): ChildProcess | null {
+export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionMode, timeoutMs, resumeSessionId, constitution, bands, callbacks }: SpawnOpts): ChildProcess | null {
+  const promptFor = (t: typeof task): string =>
+    bands ? buildBandedSystemPrompt(t, bands) : buildSystemPrompt(t, constitution);
   // Test-only escape hatch: when AGENT_TRAIL_CLAUDE_MOCK is set to a JSON
   // scenario, skip spawning a real subprocess and drive the callbacks with
   // scripted events. Lets server-level E2E tests exercise the full pipeline
@@ -64,7 +70,7 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
     void worktreePath; void mcpConfigPath; void permissionMode; void timeoutMs;
     // Pre-compute the system prompt so the mock can optionally echo it — the
     // only way an E2E test can prove the constitution reached the adapter.
-    const systemPrompt = buildSystemPrompt(task, constitution);
+    const systemPrompt = promptFor(task);
     runMockAdapter(task, mock, callbacks, systemPrompt);
     return null;
   }
@@ -90,7 +96,7 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
         "--verbose",
         "--resume", resumeSessionId,
         "--permission-mode", permissionMode,
-        "--append-system-prompt", buildSystemPrompt(task, constitution),
+        "--append-system-prompt", promptFor(task),
       ]
     : [
         "-p",
@@ -99,7 +105,7 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
         "--verbose",
         "--no-session-persistence",
         "--permission-mode", permissionMode,
-        "--append-system-prompt", buildSystemPrompt(task, constitution),
+        "--append-system-prompt", promptFor(task),
       ];
 
   const resolvedModel = resolveModel(task.model, task.modelTier);
