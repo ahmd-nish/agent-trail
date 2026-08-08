@@ -3,8 +3,16 @@ export { append, count, getById, hashEvent, list } from "./store.ts";
 export type { AppendOptions, AppendResult, ListFilter } from "./store.ts";
 export { backfillFromContextDir } from "./backfill.ts";
 export type { BackfillReport } from "./backfill.ts";
-export { extractContract, renderContract } from "./contracts.ts";
-export type { CapabilityContract, ExtractContractInput } from "./contracts.ts";
+export { extractContract, extractFileSymbols, renderContract } from "./contracts.ts";
+export type { CapabilityContract, ExportKind, ExportSig, ExtractContractInput } from "./contracts.ts";
+// §3.1 — the code-index adapter seam. `native` is always available (rule 2).
+export {
+  NativeCodeIndex, fileUrn, moduleUrn, parseUrn, pathUrns,
+  resolveCodeIndex, symbolUrn, toPosixPath,
+} from "./code-index.ts";
+export type { CodeIndex, NativeCodeIndexOptions, ParsedUrn, SymbolKind, SymbolRef } from "./code-index.ts";
+export { changedFileCorpus, formatBenchReport, runCodeIndexBench } from "./code-index-bench.ts";
+export type { CodeIndexBenchOptions, CodeIndexBenchReport } from "./code-index-bench.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";
 export { search } from "./search.ts";

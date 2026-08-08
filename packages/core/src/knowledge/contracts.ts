@@ -127,7 +127,29 @@ function isTypeScriptish(path: string): boolean {
   return /\.(m?[tj]sx?|cts|mts)$/.test(path);
 }
 
-interface ExportSig { symbol: string; signature: string; }
+/** What an export turned out to be. Mirrors CodeIndex's SymbolKind so the
+ *  native adapter can pass these through without a second mapping table. */
+export type ExportKind = "function" | "class" | "type";
+
+export interface ExportSig {
+  symbol: string;
+  signature: string;
+  /** Coarse kind. `type` covers interface / type / enum — they are all
+   *  shape declarations from a caller's point of view. */
+  kind: ExportKind;
+  /** 1-indexed line of the declaration, for `sym:` addressing. */
+  line: number;
+}
+
+/**
+ * Exported so the `native` CodeIndex adapter can reuse exactly the extraction
+ * the contract emitter uses — one regex set, not two that drift apart.
+ * Comments are stripped before scanning, so the line numbers returned are
+ * positions in the ORIGINAL content (block comments are blanked, not removed).
+ */
+export function extractFileSymbols(path: string, content: string): ExportSig[] {
+  return isTypeScriptish(path) ? extractExportsTS(content) : [];
+}
 
 /**
  * TypeScript export extraction. Anchored patterns for the common shapes:
@@ -146,8 +168,11 @@ interface ExportSig { symbol: string; signature: string; }
  */
 function extractExportsTS(content: string): ExportSig[] {
   const out: ExportSig[] = [];
-  // Strip block comments so regex doesn't match "export" inside comments.
-  const stripped = content.replace(/\/\*[\s\S]*?\*\//g, "");
+  // Blank out block comments so regex doesn't match "export" inside them.
+  // Newlines are preserved (each non-newline char becomes a space) so the
+  // reported line numbers stay true to the original file — `sym:` addressing
+  // depends on that.
+  const stripped = content.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
   const lines = stripped.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
@@ -162,7 +187,7 @@ function extractExportsTS(content: string): ExportSig[] {
       const symbol = fn[1] as string;
       const signature = collectSignature(lines, i, ")", ":", "{").trim();
       const clean = signature.replace(/\s+/g, " ").replace(/\s*\{\s*$/, "");
-      out.push({ symbol, signature: clean.replace(/^export\s+/, "") });
+      out.push({ symbol, signature: clean.replace(/^export\s+/, ""), kind: "function", line: i + 1 });
       continue;
     }
 
@@ -172,7 +197,7 @@ function extractExportsTS(content: string): ExportSig[] {
       const symbol = arrow[1] as string;
       const signature = collectSignature(lines, i, ")", "=>", ";").trim().replace(/\s+/g, " ");
       const clean = signature.replace(/^export\s+/, "");
-      out.push({ symbol, signature: clean });
+      out.push({ symbol, signature: clean, kind: "function", line: i + 1 });
       continue;
     }
 
@@ -181,7 +206,7 @@ function extractExportsTS(content: string): ExportSig[] {
     if (typedConst) {
       const symbol = typedConst[1] as string;
       const typ = (typedConst[2] as string).trim();
-      out.push({ symbol, signature: `const ${symbol}: ${typ}` });
+      out.push({ symbol, signature: `const ${symbol}: ${typ}`, kind: "type", line: i + 1 });
       continue;
     }
 
@@ -189,28 +214,28 @@ function extractExportsTS(content: string): ExportSig[] {
     const litConst = raw.match(/^\s*export\s+const\s+([A-Za-z_$][\w$]*)\s*=/);
     if (litConst) {
       const symbol = litConst[1] as string;
-      out.push({ symbol, signature: `const ${symbol}` });
+      out.push({ symbol, signature: `const ${symbol}`, kind: "type", line: i + 1 });
       continue;
     }
 
     // export class / interface / abstract class
     const cls = raw.match(/^\s*export\s+(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/);
-    if (cls) { out.push({ symbol: cls[1] as string, signature: `class ${cls[1]}` }); continue; }
+    if (cls) { out.push({ symbol: cls[1] as string, signature: `class ${cls[1]}`, kind: "class", line: i + 1 }); continue; }
 
     const iface = raw.match(/^\s*export\s+interface\s+([A-Za-z_$][\w$]*)/);
-    if (iface) { out.push({ symbol: iface[1] as string, signature: `interface ${iface[1]}` }); continue; }
+    if (iface) { out.push({ symbol: iface[1] as string, signature: `interface ${iface[1]}`, kind: "type", line: i + 1 }); continue; }
 
     // export type Name = ...   (single-line RHS or across lines — sig captures the first line only)
     const typ = raw.match(/^\s*export\s+type\s+([A-Za-z_$][\w$]*)\s*(?:<[^>]+>)?\s*=\s*(.+?)\s*(?:;|\/\/|$)/);
     if (typ) {
       const symbol = typ[1] as string;
       const rhs = (typ[2] as string).trim();
-      out.push({ symbol, signature: `type ${symbol} = ${rhs.length > 80 ? rhs.slice(0, 80) + "…" : rhs}` });
+      out.push({ symbol, signature: `type ${symbol} = ${rhs.length > 80 ? rhs.slice(0, 80) + "…" : rhs}`, kind: "type", line: i + 1 });
       continue;
     }
 
     const en = raw.match(/^\s*export\s+enum\s+([A-Za-z_$][\w$]*)/);
-    if (en) { out.push({ symbol: en[1] as string, signature: `enum ${en[1]}` }); continue; }
+    if (en) { out.push({ symbol: en[1] as string, signature: `enum ${en[1]}`, kind: "type", line: i + 1 }); continue; }
   }
 
   // Dedupe by symbol name — a `function foo` with an accompanying interface

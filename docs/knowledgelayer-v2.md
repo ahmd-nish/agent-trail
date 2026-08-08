@@ -136,9 +136,15 @@ Four rules, each load-bearing:
 
 ### 3.2 What to build in the spike
 
-- [ ] `native` adapter — wraps what exists today. This is the control.
+- [x] `native` adapter — wraps what exists today. This is the control.
 - [ ] `codegraph` adapter — MIT, embedded SQLite, closest to the shape §4.2c specified. Read its SQLite file directly if the schema is stable; fall back to MCP tool calls if not.
 - [ ] `serena` adapter — LSP-backed, different failure mode (live and always-current, but requires a language server per language). Worth measuring because its staleness profile is the opposite of an indexed tool's.
+
+> Neither external backend is installed on this machine (`codegraph`, `serena` both
+> absent; `uvx` is present so both are installable). Installing third-party software is
+> a supply-chain decision, so it is left for an explicit call rather than done silently.
+> The interface and the bench are backend-agnostic — scoring either one is a
+> `resolveCodeIndex` registry entry plus one bench run, no rework.
 
 Skip GitNexus in the spike: PolyForm Noncommercial is incompatible with agent-trail's MIT distribution and the Team Cloud tier in §5.1. Note it and move on.
 
@@ -169,6 +175,55 @@ Adopt an external index as the **default** if, on the unfamiliar repo, it delive
 Either way the adapter interface ships, because it is what §J joins against.
 
 **Exit criteria:** a written decision, a table of numbers behind it, and one adapter marked default in config.
+
+> **DECISION 2026-08-08 — ship `native` as default. Do not adopt an external index yet.**
+>
+> Measured with `runCodeIndexBench`, corpus = agent-trail's own 239 tracked TS/JS files
+> (the last 40 commits touched all of them, so the "changed files" proxy is the whole
+> codebase here). `tasks.likely_paths` was empty on all 44 rows — a consequence of the
+> Phase 0 bug — so the commit footprint is the only honest corpus available today.
+>
+> | Metric | `native` | Gate | Verdict |
+> |---|---|---|---|
+> | Coverage, files declaring ≥1 export | **96.6%** (141/146) | ≥ 50% | clears by 46 pts |
+> | Coverage, all corpus files | 59.0% (141/239) | — | 84 test files export nothing |
+> | Resolution latency p50 / p99 | **0.11ms / 1.08ms** | p99 < 200ms | clears by 185× |
+> | Whole-repo scan | **10.75ms**, 239 files → 489 symbols | onboarding | negligible |
+> | Blind-spot rate (staleness FN proxy) | **6.5%** (34/523 exports) | < native | n/a — this *is* native |
+>
+> **Why this settles it for now.** §3.4's gate was written to justify *adopting* an
+> external index. On a TS repo the control already clears both thresholds with room to
+> spare, so there is no coverage or latency headroom left for an external backend to buy.
+> Adopting one would add a solo-maintained dependency (§11 risk 1) and a per-teammate
+> install step to win a fraction of 6.5%.
+>
+> **The one real deficit, and the cheap fix.** The blind spots are not spread evenly —
+> they are concentrated in three shapes the regex structurally cannot see:
+>
+> ```
+> export { a, b } from "./x"   13/13 missed
+> export * from "./x"           4/4  missed
+> export default                3/3  missed
+> ```
+>
+> That is 20 of the 34 misses, and it is exactly the §4.2e failure mode: a signature
+> change behind a re-export cannot move `signature_hash`, so a stale contract reads as
+> verified-current. Extending the native extractor to these three shapes is bounded
+> work with no new dependency, and would cut the blind-spot rate to roughly 2.7%.
+> Do that before reconsidering an external backend.
+>
+> **What this does NOT establish.** §3.3's unfamiliar-repo requirement is unmet — this
+> is the familiar corpus, and the doc is explicit that it understates the value of an
+> external index on a repo nobody has seen. The discovery-tool-call delta was
+> deliberately not measured here for the same reason (Grep 1 / Glob 20 across 38
+> executions leaves no headroom to recover). Treat this decision as *provisional and
+> corpus-bound*: it says native is sufficient for repos shaped like agent-trail, not
+> that external indexes are unnecessary in general.
+>
+> Shipped: `code-index.ts` (interface, URN addressing, `NativeCodeIndex`,
+> `resolveCodeIndex` with fallback-on-failure), `code-index-bench.ts` (backend-agnostic
+> scoring), 26 tests. `AGENT_TRAIL_CODE_INDEX` selects a backend; unknown or unhealthy
+> names warn and fall back to native rather than failing a spawn.
 
 ---
 
