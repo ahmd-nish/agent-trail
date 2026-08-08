@@ -23,7 +23,12 @@ import { extractFileSymbols, type ExportKind } from "./contracts.ts";
 
 export type SymbolKind =
   | "function" | "class" | "method" | "type"
-  | "route" | "table" | "env" | "file";
+  | "route" | "table" | "env" | "file"
+  // Deviation from §3.1's list, deliberately: a re-exported name is exposed
+  // here but defined elsewhere, and its true kind needs cross-module
+  // resolution. "reexport" is accurate; forcing it into "function" or "type"
+  // would be a guess persisted into §J's edges.
+  | "reexport";
 
 export interface SymbolRef {
   /** Repo-relative, POSIX separators, always. Rule 1. */
@@ -112,6 +117,7 @@ const KIND_MAP: Record<ExportKind, SymbolKind> = {
   function: "function",
   class: "class",
   type: "type",
+  reexport: "reexport",
 };
 
 /** Files worth scanning. Mirrors the contract extractor's language support —

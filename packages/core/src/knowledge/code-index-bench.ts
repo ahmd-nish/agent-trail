@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CodeIndex } from "./code-index.ts";
 import { toPosixPath } from "./code-index.ts";
+import { collectExportList } from "./contracts.ts";
 
 export interface CodeIndexBenchOptions {
   root: string;
@@ -72,18 +73,62 @@ export interface CodeIndexBenchReport {
   notes: string[];
 }
 
-/** Export shapes, as ground truth for the blind-spot metric. Order matters —
- *  first match wins, so more specific patterns come first. */
-const EXPORT_SHAPES: Array<{ shape: string; re: RegExp; resolvable: boolean }> = [
-  { shape: "export default", re: /^\s*export\s+default\b/, resolvable: false },
-  { shape: "export * (re-export)", re: /^\s*export\s+\*/, resolvable: false },
-  { shape: "export { } (re-export list)", re: /^\s*export\s*\{/, resolvable: false },
-  { shape: "export function", re: /^\s*export\s+(?:async\s+)?function\s+[A-Za-z_$]/, resolvable: true },
-  { shape: "export class", re: /^\s*export\s+(?:abstract\s+)?class\s+[A-Za-z_$]/, resolvable: true },
-  { shape: "export interface", re: /^\s*export\s+interface\s+[A-Za-z_$]/, resolvable: true },
-  { shape: "export type", re: /^\s*export\s+type\s+[A-Za-z_$]/, resolvable: true },
-  { shape: "export enum", re: /^\s*export\s+enum\s+[A-Za-z_$]/, resolvable: true },
-  { shape: "export const/let/var", re: /^\s*export\s+(?:const|let|var)\s+[A-Za-z_$]/, resolvable: true },
+/**
+ * Ground truth for the blind-spot metric: each export shape, and the NAMES it
+ * declares. Matching on names rather than counting lines is what keeps this
+ * bench adapter-agnostic — an earlier version carried a `resolvable: boolean`
+ * per shape, which baked the native extractor's limitations into a bench that
+ * is supposed to score any backend impartially. A shape is "missed" only if the
+ * adapter failed to return the name, whoever the adapter is.
+ *
+ * Order matters — first match wins, so more specific patterns come first.
+ */
+const EXPORT_SHAPES: Array<{ shape: string; re: RegExp; names: (line: string) => string[] }> = [
+  {
+    shape: "export default",
+    re: /^\s*export\s+default\b/,
+    names: (l) => [l.match(/^\s*export\s+default\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/)?.[1] ?? "default"],
+  },
+  {
+    shape: "export * (re-export)",
+    re: /^\s*export\s+\*/,
+    names: (l) => [l.match(/^\s*export\s+\*\s+as\s+([A-Za-z_$][\w$]*)/)?.[1] ?? "*"],
+  },
+  {
+    shape: "export { } (re-export list)",
+    re: /^\s*export\s+(?:type\s+)?\{/,
+    names: () => [],   // filled in by the multi-line collector at the call site
+  },
+  {
+    shape: "export function",
+    re: /^\s*export\s+(?:async\s+)?function\s+[A-Za-z_$]/,
+    names: (l) => [l.match(/function\s+([A-Za-z_$][\w$]*)/)?.[1] ?? ""],
+  },
+  {
+    shape: "export class",
+    re: /^\s*export\s+(?:abstract\s+)?class\s+[A-Za-z_$]/,
+    names: (l) => [l.match(/class\s+([A-Za-z_$][\w$]*)/)?.[1] ?? ""],
+  },
+  {
+    shape: "export interface",
+    re: /^\s*export\s+interface\s+[A-Za-z_$]/,
+    names: (l) => [l.match(/interface\s+([A-Za-z_$][\w$]*)/)?.[1] ?? ""],
+  },
+  {
+    shape: "export type",
+    re: /^\s*export\s+type\s+[A-Za-z_$]/,
+    names: (l) => [l.match(/type\s+([A-Za-z_$][\w$]*)/)?.[1] ?? ""],
+  },
+  {
+    shape: "export enum",
+    re: /^\s*export\s+enum\s+[A-Za-z_$]/,
+    names: (l) => [l.match(/enum\s+([A-Za-z_$][\w$]*)/)?.[1] ?? ""],
+  },
+  {
+    shape: "export const/let/var",
+    re: /^\s*export\s+(?:const|let|var)\s+[A-Za-z_$]/,
+    names: (l) => [l.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)/)?.[1] ?? ""],
+  },
 ];
 
 const SCANNABLE = /\.(m?[tj]sx?|cts|mts)$/;
@@ -165,41 +210,43 @@ export async function runCodeIndexBench(
     }
     // Blank block comments so a commented-out export isn't counted as ground truth.
     const stripped = content.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
-    const resolvedHere = resolvedByFile.get(file)?.size ?? 0;
+    const resolvedNames = resolvedByFile.get(file) ?? new Set<string>();
+    const lines = stripped.split("\n");
     let declaredHere = 0;
+    let resolvedHere = 0;
 
-    for (const line of stripped.split("\n")) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] ?? "";
       if (/^\s*\/\//.test(line)) continue;
       const hit = EXPORT_SHAPES.find((s) => s.re.test(line));
       if (!hit) continue;
-      declaredHere++;
+
+      // The brace-list shape spans lines, so its names come from the collector
+      // rather than a single-line regex.
+      let names: string[];
+      if (hit.shape === "export { } (re-export list)") {
+        const parsed = collectExportList(lines, i);
+        names = parsed.names;
+        i = parsed.endIdx;
+      } else {
+        names = hit.names(line).filter(Boolean);
+      }
+      if (names.length === 0) continue;
+
       const entry = shapeCounts.get(hit.shape) ?? { declared: 0, missed: 0 };
-      entry.declared++;
-      // Shapes the extractor structurally cannot represent are always missed.
-      if (!hit.resolvable) entry.missed++;
+      for (const n of names) {
+        entry.declared++;
+        declaredHere++;
+        if (resolvedNames.has(n)) { resolvedHere++; } else { entry.missed++; }
+      }
       shapeCounts.set(hit.shape, entry);
     }
 
     declaredExports += declaredHere;
-    resolvedExports += Math.min(resolvedHere, declaredHere);
+    resolvedExports += resolvedHere;
     if (declaredHere > 0) {
       filesDeclaringExports++;
       if (resolvedHere > 0) filesResolvedAmongExporting++;
-    }
-  }
-
-  // Attribute the residual gap to resolvable shapes proportionally — those are
-  // declarations the extractor *should* have caught and did not.
-  const structurallyMissed = [...shapeCounts.values()].reduce((a, e) => a + e.missed, 0);
-  const residual = Math.max(0, declaredExports - resolvedExports - structurallyMissed);
-  if (residual > 0) {
-    const resolvableShapes = EXPORT_SHAPES.filter((s) => s.resolvable)
-      .map((s) => s.shape)
-      .filter((s) => (shapeCounts.get(s)?.declared ?? 0) > 0);
-    const totalResolvable = resolvableShapes.reduce((a, s) => a + (shapeCounts.get(s)?.declared ?? 0), 0);
-    for (const shape of resolvableShapes) {
-      const entry = shapeCounts.get(shape)!;
-      entry.missed += Math.round(residual * (entry.declared / Math.max(1, totalResolvable)));
     }
   }
 

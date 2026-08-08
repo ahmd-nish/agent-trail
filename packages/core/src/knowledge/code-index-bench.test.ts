@@ -36,26 +36,57 @@ describe("runCodeIndexBench (§3.3)", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("blind spots name the shapes the extractor structurally cannot see", async () => {
+  test("native now resolves default / star / brace-list re-exports", async () => {
+    // These three were 20 of the 34 blind spots the Phase 1 bench found and are
+    // the §4.2e failure mode: a signature change behind a re-export cannot move
+    // signature_hash if the name was never captured.
     const root = fixture({
       "m.ts": [
         "export default function main() {}",
         'export * from "./other.ts";',
-        'export { a, b } from "./other.ts";',
+        'export { a, b as c } from "./other.ts";',
         "export function seen() {}",
       ].join("\n") + "\n",
     });
     const corpus = ["m.ts"];
     const r = await runCodeIndexBench(new NativeCodeIndex({ root, fileListOverride: corpus }), { root, corpus });
 
-    expect(r.blindSpots.declaredExports).toBe(4);
+    // 5 names: main, *, a, c, seen  (`b as c` exports c, the imported name)
+    expect(r.blindSpots.declaredExports).toBe(5);
+    expect(r.blindSpots.missRate).toBe(0);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("the shapes are still COUNTED, so a backend that misses them is caught", async () => {
+    // Guards the bench's own impartiality: an earlier version hardcoded these
+    // shapes as unresolvable, which would have reported them as missed no
+    // matter how good the adapter was.
+    const root = fixture({
+      "m.ts": ['export * from "./other.ts";', 'export { a } from "./other.ts";', "export default 1;"].join("\n") + "\n",
+    });
+    const blind: CodeIndex = {
+      name: "blind", available: async () => true,
+      symbolsInPaths: async () => [], findSymbol: async () => [],
+      getSignature: async () => null, whoCalls: async () => [], indexedAtSha: async () => null,
+    };
+    const r = await runCodeIndexBench(blind, { root, corpus: ["m.ts"] });
     const byShape = Object.fromEntries(r.blindSpots.byShape.map((s) => [s.shape, s]));
-    expect(byShape["export default"]!.missed).toBe(1);
     expect(byShape["export * (re-export)"]!.missed).toBe(1);
     expect(byShape["export { } (re-export list)"]!.missed).toBe(1);
-    // These are real staleness false negatives: a signature change behind a
-    // re-export cannot move the hash if the export was never captured.
-    expect(r.blindSpots.missRate).toBeGreaterThan(0);
+    expect(byShape["export default"]!.missed).toBe(1);
+    expect(r.blindSpots.missRate).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("a multi-line export list is parsed, and `x as y` yields y", async () => {
+    const root = fixture({
+      "m.ts": "export {\n  alpha,\n  beta as gamma,\n} from \"./other.ts\";\n",
+    });
+    const idx = new NativeCodeIndex({ root, fileListOverride: ["m.ts"] });
+    const names = (await idx.symbolsInPaths(["m.ts"])).map((s) => s.name).sort();
+    expect(names).toEqual(["alpha", "gamma"]);
+    const r = await runCodeIndexBench(idx, { root, corpus: ["m.ts"] });
+    expect(r.blindSpots.missRate).toBe(0);
     rmSync(root, { recursive: true, force: true });
   });
 

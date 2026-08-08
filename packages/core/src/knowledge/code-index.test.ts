@@ -110,6 +110,34 @@ export type Token = string;
     rmSync(root, { recursive: true, force: true });
   });
 
+  test("resolves a union type alias whose RHS starts on the next line", async () => {
+    // 15 of 44 type aliases in this repo are written this way. Requiring the
+    // RHS on the declaration line missed every one of them.
+    const root = fixtureRepo({
+      "t.ts": `export type TaskStatus =\n  | "backlog"\n  | "done";\n\nexport type Inline = string;\n`,
+    });
+    const idx = new NativeCodeIndex({ root, fileListOverride: ["t.ts"] });
+    const syms = await idx.symbolsInPaths(["t.ts"]);
+    const byName = Object.fromEntries(syms.map((s) => [s.name, s]));
+    expect(Object.keys(byName).sort()).toEqual(["Inline", "TaskStatus"]);
+    expect(byName.TaskStatus!.signature).toContain("backlog");
+    expect(byName.TaskStatus!.line).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("re-exports are kinded `reexport`, not guessed as function or type", async () => {
+    const root = fixtureRepo({
+      "r.ts": `export * from "./a.ts";\nexport { one, two as three } from "./b.ts";\nexport * as ns from "./c.ts";\n`,
+    });
+    const idx = new NativeCodeIndex({ root, fileListOverride: ["r.ts"] });
+    const syms = await idx.symbolsInPaths(["r.ts"]);
+    expect(syms.map((s) => s.name).sort()).toEqual(["*", "ns", "one", "three"]);
+    // Resolving the true kind needs cross-module resolution; claiming one
+    // would be a fabrication persisted into §J's edges.
+    expect(new Set(syms.map((s) => s.kind))).toEqual(new Set(["reexport"]));
+    rmSync(root, { recursive: true, force: true });
+  });
+
   test("ignores files it cannot parse rather than guessing", async () => {
     const root = fixtureRepo({ "readme.md": "# not code", "q.sql": "CREATE TABLE t (id TEXT);" });
     const idx = new NativeCodeIndex({ root, fileListOverride: ["readme.md", "q.sql"] });
