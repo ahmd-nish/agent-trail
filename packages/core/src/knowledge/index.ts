@@ -35,6 +35,15 @@ export { formatRetrievedFacts, retrieveForTask } from "./retrieval.ts";
 export type { RetrievalOptions, RetrievedFact, SeedSource } from "./retrieval.ts";
 export { projectModuleBriefs, projectObsidianVault, projectProjectMap } from "./projections.ts";
 export type { ModuleBrief, ProjectMap, ProjectionOptions, VaultNote } from "./projections.ts";
+// §4.4 — the three-band prompt. Bands A+B must be byte-stable across spawns.
+export { EMPTY_BANDS, assemblePrompt, bandSizes, stablePrefix, stablePrefixHash } from "./bands.ts";
+export type { PromptBands } from "./bands.ts";
+// §4.6 — sync: a cursor, not a sync engine.
+export {
+  SYNC_STATE_DDL, applyIncoming, ensureSyncState, envelopeCursor, getSyncState,
+  pendingPush, syncOnce, upsertSyncState,
+} from "./sync.ts";
+export type { SyncEnvelope, SyncOptions, SyncResult, SyncState } from "./sync.ts";
 export type { CodeIndexBenchOptions, CodeIndexBenchReport } from "./code-index-bench.ts";
 export { foldConstitution } from "./fold.ts";
 export type { FoldConstitutionOptions, FoldedConstitution, FoldedSection } from "./fold.ts";

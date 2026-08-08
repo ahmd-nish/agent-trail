@@ -68,3 +68,28 @@ describe("detectThrash — PRD §5.3", () => {
     expect(v.thrash).toBe(false);
   });
 });
+
+describe("normalize ordering — the 1-in-4 thrash miss", () => {
+  // Same failure, but the durations differ in CHARACTER COUNT. Slicing the
+  // tail before normalizing made these two compare unequal, so a genuinely
+  // thrashing loop went undetected and kept burning tokens.
+  const sample = (err: string) => ({ status: "failed", tddPhase: "verify_tests", errorMessage: err });
+  const runA = `${"x".repeat(900)}\n1 | expect(1).toBe(2)\nRan 1 tests across 1 files. [12.34ms]`;
+  const runB = `${"x".repeat(900)}\n1 | expect(1).toBe(2)\nRan 1 tests across 1 files. [9.1ms]`;
+
+  test("identical failures with different-length durations are seen as identical", () => {
+    const verdict = detectThrash([sample(runA), sample(runB)]);
+    expect(verdict.thrash).toBe(true);
+    expect(verdict.signal).toBe("repeated_failure");
+  });
+
+  test("ANSI colour codes do not defeat the comparison", () => {
+    const coloured = `${"x".repeat(900)}\n\u001B[31m1 | expect(1).toBe(2)\u001B[0m\nRan 1 tests across 1 files. [4ms]`;
+    expect(detectThrash([sample(runA), sample(coloured)]).thrash).toBe(true);
+  });
+
+  test("genuinely different failures are still distinguished", () => {
+    const other = `${"x".repeat(900)}\n1 | expect(somethingElse).toBeNull()\nRan 1 tests across 1 files. [9.1ms]`;
+    expect(detectThrash([sample(runA), sample(other)]).thrash).toBe(false);
+  });
+});

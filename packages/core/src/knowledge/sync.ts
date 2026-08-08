@@ -21,7 +21,7 @@
 
 import type { Database } from "bun:sqlite";
 import { appendEdge, hasEdgeTable, type KnowledgeEdge, type NewKnowledgeEdge } from "./edges.ts";
-import { append, list } from "./store.ts";
+import { append, rowToEvent, type RawRow } from "./store.ts";
 import type { KnowledgeEvent, NewKnowledgeEvent } from "./types.ts";
 
 export const SYNC_STATE_DDL = `
@@ -63,6 +63,11 @@ export interface SyncResult {
   cursor: string | null;
   skipped: boolean;
   reason?: string;
+  /** True when a batch limit was hit, so more remains. One syncOnce() drains at
+   *  most `batchLimit`; a caller with a backlog must loop until this is false.
+   *  Reported rather than looped internally so an unbounded backlog cannot turn
+   *  a single call into an unbounded run. */
+  hasMore: boolean;
 }
 
 function hasTable(db: Database, name: string): boolean {
@@ -122,22 +127,29 @@ export function pendingPush(
   opts: { workspaceId: string; projectId: string; sinceEvent?: string | null; sinceEdge?: string | null; limit?: number },
 ): { events: KnowledgeEvent[]; edges: KnowledgeEdge[] } {
   const limit = opts.limit ?? 500;
-  const events = list(db, {
-    workspaceId: opts.workspaceId,
-    projectId: opts.projectId,
-    activeOnly: false,   // supersession is itself state that must replicate
-  })
-    .filter((e) => !opts.sinceEvent || e.id > opts.sinceEvent)
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .slice(0, limit);
+  // Paged in SQL, not filtered in memory. list() would materialize the WHOLE
+  // log on every sync — fine at 5k events, ruinous at 100k, and a sync path is
+  // exactly where that grows without anyone noticing.
+  //
+  // activeOnly is deliberately absent: supersession is itself state that has to
+  // replicate, so superseded rows must go over the wire too.
+  const events = (db.query(
+    `SELECT * FROM knowledge_events
+      WHERE workspace_id = ? AND project_id = ? AND (? = '' OR id > ?)
+      ORDER BY id LIMIT ?`,
+  ).all(
+    opts.workspaceId, opts.projectId,
+    opts.sinceEvent ?? "", opts.sinceEvent ?? "",
+    limit,
+  ) as RawRow[]).map(rowToEvent);
 
   let edges: KnowledgeEdge[] = [];
   if (hasEdgeTable(db)) {
     edges = (db.query(
       `SELECT * FROM knowledge_edges
-        WHERE workspace_id = ? AND project_id = ? AND (? IS NULL OR id > ?)
+        WHERE workspace_id = ? AND project_id = ? AND (? = '' OR id > ?)
         ORDER BY id LIMIT ?`,
-    ).all(opts.workspaceId, opts.projectId, opts.sinceEdge ?? null, opts.sinceEdge ?? "", limit) as Array<Record<string, unknown>>)
+    ).all(opts.workspaceId, opts.projectId, opts.sinceEdge ?? "", opts.sinceEdge ?? "", limit) as Array<Record<string, unknown>>)
       .map(rowToEdge);
   }
   return { events, edges };
@@ -236,7 +248,7 @@ export interface SyncOptions {
  * not. Append-only means there is never a conflict to resolve.
  */
 export async function syncOnce(db: Database, opts: SyncOptions): Promise<SyncResult> {
-  const empty: SyncResult = { pushed: { events: 0, edges: 0 }, pulled: { events: 0, edges: 0 }, cursor: null, skipped: true };
+  const empty: SyncResult = { pushed: { events: 0, edges: 0 }, pulled: { events: 0, edges: 0 }, cursor: null, skipped: true, hasMore: false };
   if (opts.localOnly) return { ...empty, reason: "sync:local-only — nothing left this machine" };
 
   ensureSyncState(db);
@@ -245,16 +257,18 @@ export async function syncOnce(db: Database, opts: SyncOptions): Promise<SyncRes
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (opts.token) headers["Authorization"] = `Bearer ${opts.token}`;
 
-  const result: SyncResult = { pushed: { events: 0, edges: 0 }, pulled: { events: 0, edges: 0 }, cursor: state?.pullCursor ?? null, skipped: false };
+  const result: SyncResult = { pushed: { events: 0, edges: 0 }, pulled: { events: 0, edges: 0 }, cursor: state?.pullCursor ?? null, skipped: false, hasMore: false };
 
   // ── Push ────────────────────────────────────────────────────────────────
+  const batchLimit = opts.batchLimit ?? 500;
   const { events, edges } = pendingPush(db, {
     workspaceId: opts.workspaceId,
     projectId: opts.projectId,
     sinceEvent: state?.pushCursorEvent ?? null,
     sinceEdge: state?.pushCursorEdge ?? null,
-    limit: opts.batchLimit ?? 500,
+    limit: batchLimit,
   });
+  if (events.length === batchLimit || edges.length === batchLimit) result.hasMore = true;
 
   try {
     if (events.length || edges.length) {
@@ -284,7 +298,8 @@ export async function syncOnce(db: Database, opts: SyncOptions): Promise<SyncRes
     const url = `${opts.remote.replace(/\/$/, "")}/v1/events?since=${encodeURIComponent(since)}&workspace=${encodeURIComponent(opts.workspaceId)}&project=${encodeURIComponent(opts.projectId)}`;
     const res = await doFetch(url, { headers });
     if (!res.ok) throw new Error(`pull failed: ${res.status}`);
-    const envelope = await res.json() as SyncEnvelope;
+    const envelope = await res.json() as SyncEnvelope & { hasMore?: boolean };
+    if (envelope.hasMore) result.hasMore = true;
     const applied = applyIncoming(db, envelope);
     result.pulled = { events: applied.events, edges: applied.edges };
     const cursor = envelope.cursor ?? envelopeCursor(envelope.events ?? [], envelope.edges ?? []);

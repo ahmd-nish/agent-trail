@@ -80,13 +80,24 @@ export function detectThrash(recent: ExecutionSample[]): ThrashVerdict {
 
 function normalize(msg: string | null | undefined): string {
   if (!msg) return "";
-  const tail = msg.slice(-ERROR_CMP_TAIL);
   // Two runs of the same failing suite produce output that differs in ways
   // that don't matter for identity: absolute paths (different tempdirs),
   // durations ([1.23ms]), line numbers when the file was edited between
   // runs, and PIDs. Strip all of them so the identity check catches actual
   // repeat failures without being fooled by cosmetic drift.
-  return tail
+  //
+  // ORDER MATTERS: normalize the WHOLE message, then take the tail.
+  //
+  // The reverse (slice first, then normalize) was a real defect. Substitutions
+  // change LENGTH — "[12.34ms]" and "[9.1ms]" collapse to the same token from
+  // different numbers of characters — so slicing first made two identical
+  // failures start at different logical offsets inside the message. Their
+  // normalized tails then differed at the leading edge and compared unequal,
+  // so genuine thrash went undetected and the loop kept burning tokens. It
+  // reproduced as a ~1-in-4 "flaky" e2e; it was the detector, not the test.
+  const cleaned = msg
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001B\[[0-9;]*m/g, "")               // ANSI colour
     .replace(/\/(?:tmp|var|private|Users|home)\/[^\s"']+/g, "<path>")
     .replace(/\[\s*[\d.]+\s*(?:ms|s|µs)\s*\]/gi, "[<dur>]")
     .replace(/:\d+(?::\d+)?/g, ":<n>")             // line:col in stack traces
@@ -94,6 +105,7 @@ function normalize(msg: string | null | undefined): string {
     .replace(/\b\d+\b/g, "<n>")                     // any lingering numbers
     .replace(/\s+/g, " ")
     .trim();
+  return cleaned.slice(-ERROR_CMP_TAIL);
 }
 
 function truncate(s: string, n: number): string {
