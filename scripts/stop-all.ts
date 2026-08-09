@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/** Free agent-trail's API + runner ports. Dev servers stay running (intentional). */
+/** Free inventarium's API + runner ports. Dev servers stay running (intentional). */
 import { spawn } from "node:child_process";
 
 const PORTS = [3002, 3003] as const;

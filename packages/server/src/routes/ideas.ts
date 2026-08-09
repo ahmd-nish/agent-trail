@@ -20,7 +20,7 @@ function parseTier(v: unknown): ModelTier | undefined {
 //
 // This router is deliberately dumb about the LLM: it delegates to
 // `runIdeaLLM` which returns raw text; the wizard core parses + repairs it.
-// Tests set AGENT_TRAIL_IDEA_MOCK to bypass claude.
+// Tests set INVENTARIUM_IDEA_MOCK to bypass claude.
 
 export const ideasRouter = new Hono();
 

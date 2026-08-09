@@ -4,7 +4,7 @@ import type { Task } from "../../../core/src/types/index.ts";
 import type { Tone } from "../lib/quips.ts";
 import { computeScoutState } from "../lib/scout-state.ts";
 
-const DISMISS_KEY = "agent-trail:scout-hidden";
+const DISMISS_KEY = "inventarium:scout-hidden";
 
 // PRD 1.16 stretch — Scout as a pixel-art walkman mascot with an animated
 // LED face. Body: rounded blue box with a black outline + yellow headphones
@@ -25,7 +25,7 @@ const LINES: Record<Beat, { text: string; mood: Mood }> = {
   tdd_gate:     { text: "tests first — nothing ships red.",                          mood: "thinking"   },
   decision:     { text: "your turn — the agent needs a call.",                       mood: "asking"     },
   resumed:      { text: "nice. carrying on with your answer.",                       mood: "happy"      },
-  credits:      { text: "run it on your own repo: npx agent-trail",                  mood: "happy"      },
+  credits:      { text: "run it on your own repo: npx inventarium",                  mood: "happy"      },
   idle:         { text: "ready when you are.",                                       mood: "neutral"    },
   empty_board:  { text: "drop a PRD or click the sample to get a task graph.",       mood: "neutral"    },
   working:      { text: "on it — running claude in a worktree right now.",           mood: "processing" },

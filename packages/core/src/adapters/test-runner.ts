@@ -131,9 +131,9 @@ export function detectRunner(cwd: string): Runner {
 }
 
 function detectFromOverride(cwd: string): Runner | null {
-  // `.agent-trail/runner` file, one word: e.g. "jest". Users can pin the
+  // `.inventarium/runner` file, one word: e.g. "jest". Users can pin the
   // runner when auto-detection guesses wrong (paid-tier: board settings).
-  const p = join(cwd, ".agent-trail", "runner");
+  const p = join(cwd, ".inventarium", "runner");
   if (!existsSync(p)) return null;
   const v = readFileSyncSafe(p).trim().toLowerCase();
   const valid: Runner[] = ["bun", "jest", "vitest", "pytest", "go", "cargo", "mocha", "playwright", "dotnet", "npm"];

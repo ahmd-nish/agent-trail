@@ -14,7 +14,7 @@ function defaultImplementationDir(boardName: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "board";
-  const path = join(homedir(), "agent-trail-runs", slug);
+  const path = join(homedir(), "inventarium-runs", slug);
   try { mkdirSync(path, { recursive: true }); } catch { /* best effort */ }
   return path;
 }

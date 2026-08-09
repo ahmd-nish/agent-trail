@@ -13,16 +13,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "n
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
-const MARKER = "# agent-trail:post-merge";
+const MARKER = "# inventarium:post-merge";
 
 const HOOK_BODY = `#!/bin/sh
 ${MARKER}
 # Precomputes contract validity after a merge/pull so the next task pack does
-# not pay for it. Purely an optimization — agent-trail derives staleness at
+# not pay for it. Purely an optimization — inventarium derives staleness at
 # pack time regardless, so removing this file changes speed, never answers.
 # Never blocks the merge: every failure path exits 0.
-if command -v agent-trail >/dev/null 2>&1; then
-  agent-trail knowledge revalidate --quiet >/dev/null 2>&1 || true
+if command -v inventarium >/dev/null 2>&1; then
+  inventarium knowledge revalidate --quiet >/dev/null 2>&1 || true
 fi
 exit 0
 `;
@@ -64,10 +64,10 @@ export function installPostMergeHook(repoRoot: string, opts: { force?: boolean }
       if (existing.includes(MARKER)) {
         writeFileSync(path, HOOK_BODY, "utf8");
         chmodSync(path, 0o755);
-        return { installed: true, path, reason: "updated existing agent-trail hook" };
+        return { installed: true, path, reason: "updated existing inventarium hook" };
       }
       if (!opts.force) {
-        return { installed: false, path, reason: "a post-merge hook already exists and was not written by agent-trail — pass force to replace it" };
+        return { installed: false, path, reason: "a post-merge hook already exists and was not written by inventarium — pass force to replace it" };
       }
     }
     mkdirSync(dir, { recursive: true });
@@ -79,7 +79,7 @@ export function installPostMergeHook(repoRoot: string, opts: { force?: boolean }
   }
 }
 
-/** Remove the hook, but only if agent-trail wrote it. */
+/** Remove the hook, but only if inventarium wrote it. */
 export function uninstallPostMergeHook(repoRoot: string): HookInstallResult {
   const dir = hooksDir(repoRoot);
   if (!dir) return { installed: false, path: null, reason: "not a git repository" };
@@ -87,7 +87,7 @@ export function uninstallPostMergeHook(repoRoot: string): HookInstallResult {
   try {
     if (!existsSync(path)) return { installed: false, path, reason: "no hook installed" };
     if (!readFileSync(path, "utf8").includes(MARKER)) {
-      return { installed: false, path, reason: "post-merge hook was not written by agent-trail — left alone" };
+      return { installed: false, path, reason: "post-merge hook was not written by inventarium — left alone" };
     }
     writeFileSync(path, "#!/bin/sh\nexit 0\n", "utf8");
     return { installed: false, path, reason: "removed" };

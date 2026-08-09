@@ -68,7 +68,7 @@ packages/core/src/templates/
   "estimatedCost": "$0.30",
   "tags": ["fullstack", "beginner-friendly"],
   "suggestedAgents": ["test-writer", "pr-reviewer"],
-  "implementationDir": "~/agent-trail-runs/url-shortener"
+  "implementationDir": "~/inventarium-runs/url-shortener"
 }
 ```
 
@@ -135,7 +135,7 @@ A new user lands on `localhost:5173` with zero boards and is having fun in 90 se
 ### Flow
 
 **Empty-state landing:**
-- Big centered hero card: "Welcome to agent-trail."
+- Big centered hero card: "Welcome to inventarium."
 - 30-sec ambient video loop in the background showing the cinematic feed in action (recorded from Week 1)
 - Three CTAs:
   - **"Run a sample project"** (primary, glowing) — instantiates the URL Shortener template, opens the board, immediately runs the first task
@@ -235,7 +235,7 @@ Anyone landing on the GitHub repo gets it in 10 seconds and is convinced in 30.
 ### Structure
 
 ```markdown
-# agent-trail
+# inventarium
 
 > **The fun way to run Claude Code on real projects.**
 > 
@@ -258,8 +258,8 @@ Anyone landing on the GitHub repo gets it in 10 seconds and is convinced in 30.
 ## 90-second start
 
 \`\`\`bash
-bun install -g agent-trail
-agent-trail init
+bun install -g inventarium
+inventarium init
 # → opens browser, prompts "Run a sample project?", you click yes, you watch
 \`\`\`
 
@@ -295,14 +295,14 @@ When your agent hits something it shouldn't decide alone, it calls `ask_human` a
 ## CLI
 
 \`\`\`bash
-agent-trail add "fix the auth bug" --board backend
-agent-trail run <taskId>
-agent-trail watch
+inventarium add "fix the auth bug" --board backend
+inventarium run <taskId>
+inventarium watch
 \`\`\`
 
 ## Self-host vs cloud
 
-agent-trail is **fully self-hosted**. Your tasks, your knowledge, your tokens, your machine.
+inventarium is **fully self-hosted**. Your tasks, your knowledge, your tokens, your machine.
 
 A cloud collab tier is coming (sync, team knowledge, hosted ask_human notifications). The self-hosted version stays free and full-featured forever.
 
@@ -356,7 +356,7 @@ bun publish --access public
 
 (Or use `npm publish` if Bun has rough edges.)
 
-Each subpackage published with `@agent-trail/*` namespace; the CLI is the primary `agent-trail` package.
+Each subpackage published with `@inventarium/*` namespace; the CLI is the primary `inventarium` package.
 
 ### GitHub release
 
@@ -367,8 +367,8 @@ Each subpackage published with `@agent-trail/*` namespace; the CLI is the primar
 ### Smoke test (CRITICAL)
 
 On a clean machine OR fresh user account:
-1. `bun install -g agent-trail` (or `npm install -g agent-trail`)
-2. `agent-trail init`
+1. `bun install -g inventarium` (or `npm install -g inventarium`)
+2. `inventarium init`
 3. Click through onboarding
 4. Run a sample template
 5. Watch it complete
@@ -391,7 +391,7 @@ If ANY step fails, **do not announce**. Fix and re-publish.
 3. Coffee
 
 **HN post**
-- Title: `Show HN: agent-trail – a fun way to run Claude Code on real projects`
+- Title: `Show HN: inventarium – a fun way to run Claude Code on real projects`
 - Body (3 short paragraphs):
   1. What it is + the wedge
   2. What's interesting technically (per-task MCP scoping, TDD gate, project knowledge, bundled subagents)
@@ -494,7 +494,7 @@ docs/demos/launch.gif                               ← the hero GIF
 - [ ] Onboarding takes a new visitor → running task in ≤ 90 seconds
 - [ ] Stats dashboard shows realistic hero numbers
 - [ ] README + GIF + 3 screenshots committed
-- [ ] `agent-trail` published to npm
+- [ ] `inventarium` published to npm
 - [ ] GitHub release published
 - [ ] HN post submitted
 - [ ] Twitter thread posted

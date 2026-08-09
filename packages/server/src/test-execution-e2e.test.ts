@@ -97,14 +97,14 @@ describe("server-side test execution E2E — PRD_TESTING T1", () => {
     tmp = mkdtempSync(join(tmpdir(), "at-testexec-e2e-"));
     port = await findFreePort();
     target = await startTargetServer();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
       },
       stdio: "ignore",
     });

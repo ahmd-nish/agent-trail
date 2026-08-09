@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 
 // Spins the real server in an isolated CWD to verify the new static-hosting +
-// port-plumbing plumbing for the `npx agent-trail` (1.1) launch path.
+// port-plumbing plumbing for the `npx inventarium` (1.1) launch path.
 
 const SERVER_ENTRY = join(import.meta.dir, "index.ts");
 const WEB_DIST_INDEX = join(import.meta.dir, "../../web/dist/index.html");
@@ -44,19 +44,19 @@ describe("server static hosting (npx launch path)", () => {
 
   beforeAll(async () => {
     if (!(await Bun.file(WEB_DIST_INDEX).exists())) {
-      throw new Error(`Web build missing at ${WEB_DIST_INDEX}. Run: bun run -F @agent-trail/web build`);
+      throw new Error(`Web build missing at ${WEB_DIST_INDEX}. Run: bun run -F @inventarium/web build`);
     }
-    tmp = mkdtempSync(join(tmpdir(), "agent-trail-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "inventarium-test-"));
     port = await findFreePort();
     // Strip DB-path env overrides from other tests (see plan-e2e.test.ts).
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
       },
       stdio: "ignore",
     });

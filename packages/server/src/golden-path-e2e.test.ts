@@ -9,8 +9,8 @@ import { createServer } from "node:net";
 // ─── Golden-path E2E — Phase 1 → 4.5 in one flow ─────────────────────────────
 //
 // Boots ONE server backed by a fresh workdir that carries:
-//   • CLAUDE.md and .agent-trail/context/conventions.md   (§3.4 constitution)
-//   • .agent-trail/state.json                              (§3.1 hydration)
+//   • CLAUDE.md and .inventarium/context/conventions.md   (§3.4 constitution)
+//   • .inventarium/state.json                              (§3.1 hydration)
 //   • two bun-testable subdirs — one passing, one failing  (§1.5 TDD gate)
 //
 // Then it exercises, in order:
@@ -120,12 +120,12 @@ describe("golden-path E2E — Phase 1 → 4.5 in one flow", () => {
 
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), "at-golden-path-"));
-    dbPath = join(tmp, "agent-trail.db");
+    dbPath = join(tmp, "inventarium.db");
 
     // ─── §3.4 constitution files ────────────────────────────────────────────
     writeFileSync(join(tmp, "CLAUDE.md"), "GOLDEN LAW: bun-only, TS strict.", "utf-8");
-    mkdirSync(join(tmp, ".agent-trail", "context"), { recursive: true });
-    writeFileSync(join(tmp, ".agent-trail", "context", "conventions.md"),
+    mkdirSync(join(tmp, ".inventarium", "context"), { recursive: true });
+    writeFileSync(join(tmp, ".inventarium", "context", "conventions.md"),
       "TEAM CONVENTION: reviewer must be tagged before merge.", "utf-8");
 
     // ─── §3.1 state.json to hydrate on boot ─────────────────────────────────
@@ -158,23 +158,23 @@ describe("golden-path E2E — Phase 1 → 4.5 in one flow", () => {
         created_at: "2026-07-25T00:00:00Z", updated_at: "2026-07-25T00:00:00Z",
       }],
     };
-    writeFileSync(join(tmp, ".agent-trail", "state.json"), JSON.stringify(state, null, 2), "utf-8");
+    writeFileSync(join(tmp, ".inventarium", "state.json"), JSON.stringify(state, null, 2), "utf-8");
 
     // Two real bun suites — one passes, one fails.
     passDir = seedPassingSuite(tmp);
     failDir = seedFailingSuite(tmp);
 
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_AUTOSYNC_MS: "150",           // fast autosync for the test
-        AGENT_TRAIL_CLAUDE_MOCK: MOCK_SCENARIO,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_AUTOSYNC_MS: "150",           // fast autosync for the test
+        INVENTARIUM_CLAUDE_MOCK: MOCK_SCENARIO,
       },
       stdio: "ignore",
     });
@@ -242,14 +242,14 @@ describe("golden-path E2E — Phase 1 → 4.5 in one flow", () => {
     expect(firstPrompt).toContain("## Team constitution");
     expect(firstPrompt).toContain("=== CLAUDE.md ===");
     expect(firstPrompt).toContain("GOLDEN LAW: bun-only");
-    expect(firstPrompt).toContain("=== .agent-trail/context/conventions.md ===");
+    expect(firstPrompt).toContain("=== .inventarium/context/conventions.md ===");
     expect(firstPrompt).toContain("TEAM CONVENTION");
   }, 40000);
 
   test("§3.1 autosync — new boards/tasks flow into state.json without a manual export", async () => {
     // Give autosync (150 ms interval) a couple of ticks to flush all the state
     // that the previous tests already wrote.
-    const statePath = join(tmp, ".agent-trail", "state.json");
+    const statePath = join(tmp, ".inventarium", "state.json");
     const state = await pollFor(async () => {
       if (!existsSync(statePath)) return null;
       try {

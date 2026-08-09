@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 
 // PRD_TESTING T3.2 + T3.4 E2E — real server, mocked claude via
-// AGENT_TRAIL_CASE_GEN_MOCK. Verifies:
+// INVENTARIUM_CASE_GEN_MOCK. Verifies:
 //   • POST /api/tasks/:id/generate-cases returns typed TestCase[]
 //   • Saved <original, fixed> examples on the board are surfaced
 //   • Listing + deleting examples works
@@ -74,15 +74,15 @@ describe("agent case-authoring + learning E2E — PRD_TESTING T3.2 + T3.4", () =
     mockPath = join(tmp, "case-gen.json");
     writeFileSync(mockPath, MOCK_RESPONSE, "utf-8");
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_CASE_GEN_MOCK: `file:${mockPath}`,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_CASE_GEN_MOCK: `file:${mockPath}`,
       },
       stdio: "ignore",
     });
@@ -124,7 +124,7 @@ describe("agent case-authoring + learning E2E — PRD_TESTING T3.2 + T3.4", () =
     expect(body.cases.length).toBe(1);
     expect(body.cases[0]!.id).toMatch(/^case-/);
     expect(body.cases[0]!.assertions.length).toBe(2);
-    // source === "mock" because AGENT_TRAIL_CASE_GEN_MOCK was set.
+    // source === "mock" because INVENTARIUM_CASE_GEN_MOCK was set.
     expect(body.source).toBe("mock");
     // No examples saved yet.
     expect(body.exampleCount).toBe(0);

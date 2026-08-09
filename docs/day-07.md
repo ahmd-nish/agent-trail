@@ -10,9 +10,9 @@
 ### CLI (`packages/cli/src/index.ts`)
 Three commands, zero external dependencies (ANSI coloring via raw escape codes):
 
-- **`agent-trail init`** — checks prerequisites (`claude` in PATH, `ANTHROPIC_API_KEY`), starts the API server, opens browser to http://localhost:5173
-- **`agent-trail start <taskId>`** — POSTs to `/api/tasks/:id/execute`, streams SSE events to stdout with colored output (tool calls, text, test results, awaiting_human), exits 0 on success / 1 on failure
-- **`agent-trail status`** — fetches all boards + tasks, prints a colour-coded summary with status counts and per-task status icons
+- **`inventarium init`** — checks prerequisites (`claude` in PATH, `ANTHROPIC_API_KEY`), starts the API server, opens browser to http://localhost:5173
+- **`inventarium start <taskId>`** — POSTs to `/api/tasks/:id/execute`, streams SSE events to stdout with colored output (tool calls, text, test results, awaiting_human), exits 0 on success / 1 on failure
+- **`inventarium status`** — fetches all boards + tasks, prints a colour-coded summary with status counts and per-task status icons
 
 Root `package.json` gained a `cli` script: `bun cli <command>`
 
@@ -53,4 +53,4 @@ Root `package.json` bumped to `0.1.0`.
 - VS Code extension — status bar + run task from editor
 - Multi-board views + board import/export UI
 - Webhook notifications (Slack, Discord) on task completion
-- `agent-trail plan <prd-file>` CLI command using the planner
+- `inventarium plan <prd-file>` CLI command using the planner

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agent-trail",
+      "name": "inventarium",
       "devDependencies": {
         "@biomejs/biome": "^1.9.4",
         "@types/bun": "latest",
@@ -11,18 +11,18 @@
       },
     },
     "packages/cli": {
-      "name": "@agent-trail/cli",
+      "name": "inventarium",
       "version": "1.0.0",
       "bin": {
-        "agent-trail": "./src/index.ts",
+        "inventarium": "./src/index.ts",
       },
       "dependencies": {
-        "@agent-trail/core": "workspace:*",
-        "@agent-trail/server": "workspace:*",
+        "@inventarium/core": "workspace:*",
+        "@inventarium/server": "workspace:*",
       },
     },
     "packages/core": {
-      "name": "@agent-trail/core",
+      "name": "@inventarium/core",
       "version": "1.0.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.0.0",
@@ -30,15 +30,15 @@
       },
     },
     "packages/mcp-server": {
-      "name": "@agent-trail/mcp-server",
+      "name": "@inventarium/mcp-server",
       "version": "1.0.0",
       "dependencies": {
-        "@agent-trail/core": "workspace:*",
+        "@inventarium/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
     },
     "packages/runner": {
-      "name": "@agent-trail/runner",
+      "name": "@inventarium/runner",
       "version": "1.0.0",
       "dependencies": {
         "hono": "^4.0.0",
@@ -49,20 +49,20 @@
       },
     },
     "packages/server": {
-      "name": "@agent-trail/server",
+      "name": "@inventarium/server",
       "version": "1.0.0",
       "dependencies": {
-        "@agent-trail/core": "workspace:*",
+        "@inventarium/core": "workspace:*",
         "hono": "^4.12.21",
       },
     },
     "packages/web": {
-      "name": "@agent-trail/web",
+      "name": "@inventarium/web",
       "version": "0.0.1",
       "dependencies": {
-        "@agent-trail/core": "workspace:*",
         "@dnd-kit/core": "^6.3.0",
         "@dnd-kit/sortable": "^8.0.0",
+        "@inventarium/core": "workspace:*",
         "@types/canvas-confetti": "^1.9.0",
         "canvas-confetti": "^1.9.4",
         "lucide-react": "^1.16.0",
@@ -83,18 +83,6 @@
     },
   },
   "packages": {
-    "@agent-trail/cli": ["@agent-trail/cli@workspace:packages/cli"],
-
-    "@agent-trail/core": ["@agent-trail/core@workspace:packages/core"],
-
-    "@agent-trail/mcp-server": ["@agent-trail/mcp-server@workspace:packages/mcp-server"],
-
-    "@agent-trail/runner": ["@agent-trail/runner@workspace:packages/runner"],
-
-    "@agent-trail/server": ["@agent-trail/server@workspace:packages/server"],
-
-    "@agent-trail/web": ["@agent-trail/web@workspace:packages/web"],
-
     "@biomejs/biome": ["@biomejs/biome@1.9.4", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "1.9.4", "@biomejs/cli-darwin-x64": "1.9.4", "@biomejs/cli-linux-arm64": "1.9.4", "@biomejs/cli-linux-arm64-musl": "1.9.4", "@biomejs/cli-linux-x64": "1.9.4", "@biomejs/cli-linux-x64-musl": "1.9.4", "@biomejs/cli-win32-arm64": "1.9.4", "@biomejs/cli-win32-x64": "1.9.4" }, "bin": { "biome": "bin/biome" } }, "sha512-1rkd7G70+o9KkTn5KLmDYXihGoTaIGO9PIIN2ZB7UJxFrWw04CZHPYiMRjYsaDvVV7hP1dYNRLxSANLaBFGpog=="],
 
     "@biomejs/cli-darwin-arm64": ["@biomejs/cli-darwin-arm64@1.9.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-bFBsPWrNvkdKrNCYeAp+xo2HecOGPAy9WyNyB/jKnnedgzl4W4Hb9ZMzYNbf8dMCGmUdSavlYHiR01QaYR58cw=="],
@@ -128,6 +116,16 @@
     "@emnapi/wasi-threads": ["@emnapi/wasi-threads@1.2.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w=="],
 
     "@hono/node-server": ["@hono/node-server@1.19.14", "", { "peerDependencies": { "hono": "^4" } }, "sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw=="],
+
+    "@inventarium/core": ["@inventarium/core@workspace:packages/core"],
+
+    "@inventarium/mcp-server": ["@inventarium/mcp-server@workspace:packages/mcp-server"],
+
+    "@inventarium/runner": ["@inventarium/runner@workspace:packages/runner"],
+
+    "@inventarium/server": ["@inventarium/server@workspace:packages/server"],
+
+    "@inventarium/web": ["@inventarium/web@workspace:packages/web"],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
@@ -434,6 +432,8 @@
     "iconv-lite": ["iconv-lite@0.7.2", "", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, "sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw=="],
 
     "inherits": ["inherits@2.0.4", "", {}, "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ=="],
+
+    "inventarium": ["inventarium@workspace:packages/cli"],
 
     "ip-address": ["ip-address@10.2.0", "", {}, "sha512-/+S6j4E9AHvW9SWMSEY9Xfy66O5PWvVEJ08O0y5JGyEKQpojb0K0GKpz/v5HJ/G0vi3D2sjGK78119oXZeE0qA=="],
 

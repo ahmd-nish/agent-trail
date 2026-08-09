@@ -379,7 +379,7 @@ export function App() {
 
         {/* Brand */}
         <span className="text-[11px] font-medium shrink-0" style={{ color: "var(--fg-dim)", letterSpacing: "0.04em" }}>
-          [agent-trail]
+          [inventarium]
         </span>
 
         {/* Score chip */}

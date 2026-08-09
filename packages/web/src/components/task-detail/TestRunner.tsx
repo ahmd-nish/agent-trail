@@ -181,13 +181,13 @@ export function TestRunner({ task, successCriteria }: Props) {
       const detail = (ev as CustomEvent<{ boardId?: string }>).detail;
       if (!detail?.boardId || detail.boardId === task.boardId) load();
     };
-    window.addEventListener("agent-trail:env-changed", onChange as EventListener);
-    return () => { cancelled = true; window.removeEventListener("agent-trail:env-changed", onChange as EventListener); };
+    window.addEventListener("inventarium:env-changed", onChange as EventListener);
+    return () => { cancelled = true; window.removeEventListener("inventarium:env-changed", onChange as EventListener); };
   }, [task.boardId]);
 
   // Phase 3e: tag filter for "Run all". null = run every case; tag name = run
   // only cases bearing that tag. Persisted per-task in sessionStorage.
-  const filterKey = `agent-trail.tagFilter.${task.id}`;
+  const filterKey = `inventarium.tagFilter.${task.id}`;
   const [tagFilter, setTagFilter] = useState<string | null>(() => {
     try { return sessionStorage.getItem(filterKey); } catch { return null; }
   });
@@ -327,7 +327,7 @@ export function TestRunner({ task, successCriteria }: Props) {
         "",
         "## Where to put the tests",
         "- Create a `tests/` directory under the implementation root, or place `*.test.{ts,js}` next to the route files.",
-        "- Name each test so the criterion text is recognizable — agent-trail's coverage matcher uses token overlap between test name and criterion text.",
+        "- Name each test so the criterion text is recognizable — inventarium's coverage matcher uses token overlap between test name and criterion text.",
         "  - Good: `test(\"POST /notes with valid title+body returns 201 with tags []\", …)`",
         "  - Bad:  `test(\"create works\", …)`",
         "",
@@ -342,7 +342,7 @@ export function TestRunner({ task, successCriteria }: Props) {
         "- Don't write a single mega-test — one criterion = one test (or a small `describe` block).",
         "",
         "## When you're done",
-        "Run the test suite locally once to confirm it executes. The user will re-run from the agent-trail UI.",
+        "Run the test suite locally once to confirm it executes. The user will re-run from the inventarium UI.",
       ].join("\n");
 
       const created = await api.tasks.create(task.boardId, {
@@ -356,7 +356,7 @@ export function TestRunner({ task, successCriteria }: Props) {
         successCriteria: [
           `An automated test exists for each of the ${localCriteria.length} criterion of the parent task`,
           "The test suite runs cleanly (exit code 0, all tests passing) when invoked",
-          "Each test's name contains enough of the criterion's words that agent-trail's coverage matcher will pair them up",
+          "Each test's name contains enough of the criterion's words that inventarium's coverage matcher will pair them up",
         ],
         epic: task.epic ?? undefined,
         sprint: task.sprint ?? undefined,
@@ -446,7 +446,7 @@ export function TestRunner({ task, successCriteria }: Props) {
         "2. Find the entry point that should start an HTTP server on the configured port.",
         "3. If the entry point is missing, broken, or listening on the wrong port — fix it.",
         "4. If the configured command itself is wrong (e.g. doesn't actually start a server), point it out clearly in your response so the user can update Board settings.",
-        "5. Do NOT change `agent-trail` itself. The fix lives in the implementation directory only.",
+        "5. Do NOT change `inventarium` itself. The fix lives in the implementation directory only.",
       ].join("\n");
 
       const successCriteria = [
@@ -994,7 +994,7 @@ export function TestRunner({ task, successCriteria }: Props) {
         })
         .catch(() => { /* history is best-effort */ });
       // Notify the sparkline to refresh.
-      window.dispatchEvent(new CustomEvent("agent-trail:case-ran", { detail: { caseId: id } }));
+      window.dispatchEvent(new CustomEvent("inventarium:case-ran", { detail: { caseId: id } }));
     } finally {
       setBusyCases((s) => { const next = new Set(s); next.delete(id); return next; });
     }
@@ -1081,7 +1081,7 @@ export function TestRunner({ task, successCriteria }: Props) {
             </div>
             {suiteResult.usedFallbackCwd && (
               <div className="rounded-lg border border-red-800/50 bg-red-950/30 p-3">
-                <p className="text-xs font-semibold text-red-300 mb-1 flex items-center gap-1.5"><AlertTriangle size={12} /> Tests ran against agent-trail itself, not your task</p>
+                <p className="text-xs font-semibold text-red-300 mb-1 flex items-center gap-1.5"><AlertTriangle size={12} /> Tests ran against inventarium itself, not your task</p>
                 <p className="text-[11px] text-red-200/80">This board has no implementation directory set. Open Board settings and set one.</p>
               </div>
             )}
@@ -1888,8 +1888,8 @@ function CaseSparkline({ taskId, caseId }: { taskId: string; caseId: string }) {
       const detail = (ev as CustomEvent<{ caseId?: string }>).detail;
       if (detail?.caseId === caseId) load();
     };
-    window.addEventListener("agent-trail:case-ran", onRan as EventListener);
-    return () => { cancelled = true; window.removeEventListener("agent-trail:case-ran", onRan as EventListener); };
+    window.addEventListener("inventarium:case-ran", onRan as EventListener);
+    return () => { cancelled = true; window.removeEventListener("inventarium:case-ran", onRan as EventListener); };
   }, [taskId, caseId]);
 
   if (!data || data.total === 0) return null;

@@ -127,7 +127,7 @@ Three subtle Web Audio sounds, all toggleable, off-by-default for tool clicks bu
 - Triggered by a gear icon in the header
 - Toggles for: tool tick (default off), completion ding (on), ask_human chime (on), typewriter animation (on), confetti (on)
 - Master volume slider
-- Persisted to localStorage under key `agent-trail.prefs`
+- Persisted to localStorage under key `inventarium.prefs`
 
 ### Acceptance
 - All sounds play on user gesture without console warnings (Web Audio context starts on first click)
@@ -158,9 +158,9 @@ The user can leave the tab and still know when something needs them.
 - Called from `useTaskExecution` based on running task count + awaiting_human count
 
 ### Tab title
-- When ≥1 task awaiting human: `(N) ⚠ agent-trail`
-- When ≥1 task running: `(N) agent-trail`
-- Otherwise: `agent-trail`
+- When ≥1 task awaiting human: `(N) ⚠ inventarium`
+- When ≥1 task running: `(N) inventarium`
+- Otherwise: `inventarium`
 - Pulse: toggle between two title strings every 1.5s when awaiting_human (subtle visual flicker in the tab bar)
 
 ### Acceptance

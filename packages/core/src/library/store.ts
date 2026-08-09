@@ -4,12 +4,12 @@ import { join } from "node:path";
 
 // PRD_OPEN_SOURCE §4.1/§4.2 — team-shared agent/skill library.
 //
-// Files live at `.agent-trail/library/agents/<slug>.md` (round-trips through
+// Files live at `.inventarium/library/agents/<slug>.md` (round-trips through
 // git — teammates who clone the repo inherit the whole library automatically,
 // same as the context store §3.2). Frontmatter is a superset of the
 // agentskills.io shape so imports from the wider ecosystem work unchanged.
 
-const LIBRARY_DIRNAME = ".agent-trail";
+const LIBRARY_DIRNAME = ".inventarium";
 const LIBRARY_SUBDIR = "library";
 const AGENTS_SUBDIR = "agents";
 

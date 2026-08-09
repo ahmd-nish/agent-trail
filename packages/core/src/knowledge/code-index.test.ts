@@ -188,7 +188,7 @@ export type Token = string;
     const root = fixtureRepo({ "a.ts": "export function before() {}\n" });
     const idx = new NativeCodeIndex({ root, fileListOverride: ["a.ts"] });
     expect((await idx.symbolsInPaths(["a.ts"]))[0]!.name).toBe("before");
-    // mtime-keyed cache — an edit made outside agent-trail must be visible,
+    // mtime-keyed cache — an edit made outside inventarium must be visible,
     // which is the §4.2e failure mode in miniature.
     await new Promise((r) => setTimeout(r, 10));
     writeFileSync(join(root, "a.ts"), "export function after() {}\n", "utf-8");

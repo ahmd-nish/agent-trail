@@ -3,7 +3,7 @@
  *
  * Differences from the previous (in-server) DevServerManager:
  *   - Children are spawned with `detached: true` so they survive runner death.
- *   - Every state change persists to ~/.agent-trail/runner-state.json.
+ *   - Every state change persists to ~/.inventarium/runner-state.json.
  *   - On boot, the runner adopts any tracked PIDs that are still alive.
  *
  * Logs are kept in-memory only (ring buffer). If the runner dies, the buffer

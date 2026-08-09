@@ -116,7 +116,7 @@ describe("library store — PRD §4.1/§4.2", () => {
         expect(r.entry.source).toBe("https://example.invalid/agents/fetched.md");
       }
       // Disk check.
-      const persisted = readFileSync(join(root, ".agent-trail/library/agents/fetched.md"), "utf-8");
+      const persisted = readFileSync(join(root, ".inventarium/library/agents/fetched.md"), "utf-8");
       expect(persisted).toContain("name: fetched");
     } finally {
       rmSync(root, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-# agent-trail
+# inventarium
 
 > The kanban board where your team's AI coding agents share a brain.
 
@@ -7,15 +7,15 @@ Drop a PRD → get a structured task graph → watch Claude Code execute each ta
 **Status:** v1.0.0 · MIT licensed · local-first (SQLite, nothing leaves your machine)
 **Next:** [Shared Knowledge Layer](docs/knowledgelayer.md) — multiplayer sessions and a live team context layer are the current build focus.
 
-![agent-trail — kanban board with parallel Claude Code agents, live activity feed, and a mascot narrator](docs/agent-trail-demo.gif)
+![inventarium — kanban board with parallel Claude Code agents, live activity feed, and a mascot narrator](docs/inventarium-demo.gif)
 
 ---
 
-## Why agent-trail?
+## Why inventarium?
 
-Every other team-memory product asks people to write down what they know. **agent-trail already watches them do the work — so the knowledge writes itself, and every teammate's agent inherits it.**
+Every other team-memory product asks people to write down what they know. **inventarium already watches them do the work — so the knowledge writes itself, and every teammate's agent inherits it.**
 
-Running one coding agent in a terminal is easy. Running *several*, on real work, without losing the plot — that's the hard part. Most boards show you *that* an agent is running; agent-trail closes four loops nobody else does:
+Running one coding agent in a terminal is easy. Running *several*, on real work, without losing the plot — that's the hard part. Most boards show you *that* an agent is running; inventarium closes four loops nobody else does:
 
 1. **A TDD gate** — a task cannot reach *Done* until its tests actually pass. A suite that runs zero tests does not count as a pass.
 2. **Human decision tickets** — when an agent hits a judgment call, it pauses and asks *you* via the `ask_human` MCP tool. You answer on the card; it resumes.
@@ -36,7 +36,7 @@ Running one coding agent in a terminal is easy. Running *several*, on real work,
 **Shared knowledge layer — the team brain**
 
 The part nobody else has. Every other team-memory tool asks people to *write down* what they
-know; agent-trail already watches them do the work, so the knowledge writes itself and every
+know; inventarium already watches them do the work, so the knowledge writes itself and every
 teammate's agent inherits it. See [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md) to run it for a team.
 
 - **It writes itself** — decisions, failed attempts, gotchas, steers and capability contracts
@@ -60,7 +60,7 @@ teammate's agent inherits it. See [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md) to 
   always see who changed their mind and when
 
 **Team context**
-- **Team constitution** — `.agent-trail/context/` markdown store; agent inherits it on every spawn
+- **Team constitution** — `.inventarium/context/` markdown store; agent inherits it on every spawn
 - **Context orchestrator** — per-task memories + L1 context packs derived from execution history
 - **Iteration memory** — every verify_tests failure produces a summary; the *next* attempt sees the last N tries
 - **Steering queue** — nudge a running agent from the UI or CLI; recorded with attribution
@@ -70,9 +70,9 @@ teammate's agent inherits it. See [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md) to 
 
 **Ops**
 - **Board MCP server** — the board itself is an MCP server, so Claude Code can manage tasks programmatically
-- **Board loop** — `agent-trail loop` runs the whole DAG until done, budget, or decision ticket
+- **Board loop** — `inventarium loop` runs the whole DAG until done, budget, or decision ticket
 - **Deploy agent** — ticket-gated deploys with healthcheck + auto-rollback; `--autoConfirm` for CI
-- **Headless CI mode** — `agent-trail run --ci` polls to terminal state, prints markdown, exits non-zero on failure
+- **Headless CI mode** — `inventarium run --ci` polls to terminal state, prints markdown, exits non-zero on failure
 - **Webhooks** — completion, failure, awaiting-human
 
 ## Prerequisites
@@ -83,8 +83,8 @@ teammate's agent inherits it. See [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md) to 
 ## Quickstart
 
 ```bash
-git clone https://github.com/ahmd-nish/agent-trail.git
-cd agent-trail
+git clone https://github.com/ahmd-nish/inventarium.git
+cd inventarium
 bun install
 
 # Start the API server + web UI in one command
@@ -108,9 +108,9 @@ bun cli start <taskId>                               # execute a task and stream
 bun cli run --task <id> --ci                         # headless run; markdown summary; non-zero exit on failure
 bun cli resume <taskId>                              # resume the task's previous claude session
 bun cli loop --board <id> --budget 5                 # run the whole board DAG until done / $budget / decision ticket
-bun cli context add "prefer server components"       # append a team ruling to .agent-trail/context/
+bun cli context add "prefer server components"       # append a team ruling to .inventarium/context/
 bun cli context ls                                   # list markdown files in the team context store
-bun cli sync export | import | status                # export/import board + task graph to .agent-trail/state.json
+bun cli sync export | import | status                # export/import board + task graph to .inventarium/state.json
 bun cli library add | new | ls | rm                  # manage the team agent library
 bun cli deploy --board <id> --target production      # ticket-gated deploy with healthcheck + auto-rollback
 bun cli status                                       # all boards + task counts
@@ -121,7 +121,7 @@ bun cli status                                       # all boards + task counts
 ```bash
 bun cli knowledge ls                                 # active knowledge events (decisions, gotchas, contracts)
 bun cli knowledge fold                               # preview the constitution projection
-bun cli knowledge backfill                           # sweep existing .agent-trail/context/*.md into the log
+bun cli knowledge backfill                           # sweep existing .inventarium/context/*.md into the log
 bun cli knowledge revalidate                         # recheck capability contracts against the working tree
 bun cli knowledge install-hook                       # post-merge hook that warms revalidation (optional)
 bun cli knowledge bench                              # tokens, cache-hit, cross-actor governance rate
@@ -139,7 +139,7 @@ bun cli workspace token revoke <tokenId>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        agent-trail                          │
+│                        inventarium                          │
 │                                                             │
 │  ┌───────────┐   ┌───────────────┐   ┌──────────────────┐   │
 │  │  Planner  │   │  Hono server  │   │ Execution manager│   │
@@ -164,12 +164,12 @@ bun cli workspace token revoke <tokenId>
 
 | Package | Purpose |
 |---------|---------|
-| `@agent-trail/core` | Types, DAG planner, Claude Code adapter, MCP servers, test runner, context store, model router, iteration memory |
-| `@agent-trail/server` | Hono API + execution manager + SSE bus + decision tickets + deploy targets |
-| `@agent-trail/web` | React 18 kanban board (Vite + Tailwind v4 + @dnd-kit) + Idea → Plan wizard |
-| `@agent-trail/cli` | `agent-trail` CLI — init, plan, start, run, loop, context, sync, library, deploy, status, doctor |
-| `@agent-trail/runner` | Runner package for headless execution |
-| `@agent-trail/mcp-server` | Standalone board MCP server binary |
+| `@inventarium/core` | Types, DAG planner, Claude Code adapter, MCP servers, test runner, context store, model router, iteration memory |
+| `@inventarium/server` | Hono API + execution manager + SSE bus + decision tickets + deploy targets |
+| `@inventarium/web` | React 18 kanban board (Vite + Tailwind v4 + @dnd-kit) + Idea → Plan wizard |
+| `inventarium` | `inventarium` CLI — init, plan, start, run, loop, context, sync, library, deploy, status, doctor |
+| `@inventarium/runner` | Runner package for headless execution |
+| `@inventarium/mcp-server` | Standalone board MCP server binary |
 
 ## How it works
 
@@ -205,10 +205,10 @@ Or add to `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "agent-trail": {
+    "inventarium": {
       "command": "bun",
       "args": ["packages/core/src/mcp/board-server.ts"],
-      "env": { "AGENT_TRAIL_DB_PATH": "/absolute/path/to/agent-trail.db" }
+      "env": { "INVENTARIUM_DB_PATH": "/absolute/path/to/inventarium.db" }
     }
   }
 }

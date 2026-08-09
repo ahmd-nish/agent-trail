@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-REPO="${GH_REPO:-ahmd-nish/agent-trail}"
+REPO="${GH_REPO:-ahmd-nish/inventarium}"
 
 gh release create v1.0.0 \
   --repo "$REPO" \
@@ -18,7 +18,7 @@ Parallel Claude Code executions in isolated git worktrees, under a TDD gate, wit
 
 **Install (requires Bun ≥ 1.1 globally):**
 \`\`\`
-bunx @agent-trail/cli --demo
+bunx inventarium --demo
 \`\`\`
 
 **Highlights**
@@ -31,7 +31,7 @@ bunx @agent-trail/cli --demo
 - Board loop, deploy agent with healthcheck + auto-rollback
 - Board MCP server so Claude Code can drive the board itself
 
-**Next:** [Shared Knowledge Layer](https://github.com/ahmd-nish/agent-trail/blob/main/docs/knowledgelayer.md) — the multiplayer / live-session / cross-machine team-brain layer is the current build focus.
+**Next:** [Shared Knowledge Layer](https://github.com/ahmd-nish/inventarium/blob/main/docs/knowledgelayer.md) — the multiplayer / live-session / cross-machine team-brain layer is the current build focus.
 EOF
 )"
 
@@ -40,7 +40,7 @@ echo "✓ Release created"
 # Update repo description + topics
 gh repo edit "$REPO" \
   --description "The kanban board where your team's AI coding agents share a brain. Multiplayer-first, execution-derived team context." \
-  --add-topic agent-trail \
+  --add-topic inventarium \
   --add-topic claude-code \
   --add-topic coding-agents \
   --add-topic kanban \

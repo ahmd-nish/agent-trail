@@ -56,7 +56,7 @@ import { basename, join } from "node:path";
 
 const MAX_CONCURRENT = 3;
 // User-owned data (DB, worktrees, MCP configs) lives at the project root
-// (the user's CWD when running `npx agent-trail`, or AGENT_TRAIL_ROOT).
+// (the user's CWD when running `npx inventarium`, or INVENTARIUM_ROOT).
 const REPO_ROOT = resolveProjectRoot();
 const DB_PATH = resolveDbPath(REPO_ROOT);
 // The ask-human MCP entry ships with the server package; resolve it relative
@@ -895,7 +895,7 @@ class ExecutionManager {
                 projectId: basename(REPO_ROOT) || "local",
                 actorKind: "agent",
                 actorId: "thrash-detector",
-                actorName: "agent-trail",
+                actorName: "inventarium",
                 taskId,
                 executionId,
                 type: "gotcha",
@@ -1105,12 +1105,12 @@ class ExecutionManager {
       : task;
 
     // PRD 3.4 — L0 constitution loaded per-execution so mid-run edits to
-    // CLAUDE.md / .agent-trail/context/*.md land in the next task without a
+    // CLAUDE.md / .inventarium/context/*.md land in the next task without a
     // server restart. Cap enforced inside loadConstitution.
     //
     // knowledgelayer §4.4 seed — augment the file-based constitution with a
     // fold of the event log. Two sources live side-by-side during the
-    // transition: users who haven't run `agent-trail knowledge backfill`
+    // transition: users who haven't run `inventarium knowledge backfill`
     // still get their file-based context; the fold contributes fresh
     // decisions/conventions/gotchas emitted during agent runs. Kept to
     // 2000 chars so it doesn't crowd out the file-based half; a proper
@@ -1609,8 +1609,8 @@ class ExecutionManager {
 }
 
 // MCP tool names are namespaced as `mcp__<server>__<tool>` when injected through
-// --mcp-config. Our server registers itself as `agent-trail`, so the full id is
-// `mcp__agent-trail__ask_human`. Match by suffix so we survive renames.
+// --mcp-config. Our server registers itself as `inventarium`, so the full id is
+// `mcp__inventarium__ask_human`. Match by suffix so we survive renames.
 function isAskHumanTool(name: string): boolean {
   return name === "ask_human" || name.endsWith("__ask_human");
 }

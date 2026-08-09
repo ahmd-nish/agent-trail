@@ -1,6 +1,6 @@
 // PRD_OPEN_SOURCE 2.8 — replay recorder.
 //
-// One JSONL file per execution: `<root>/.agent-trail/replays/<execId>.jsonl`.
+// One JSONL file per execution: `<root>/.inventarium/replays/<execId>.jsonl`.
 // Each line is `{ ts, event }` where `event` is exactly the UiEvent broadcast
 // via SSE. Playing back is a simple line-by-line read + setTimeout gap.
 //
@@ -15,7 +15,7 @@ import { appendFileSync, existsSync, mkdirSync, statSync, readdirSync, unlinkSyn
 import { join } from "node:path";
 import { resolveProjectRoot } from "../../../core/src/storage/paths.ts";
 
-const REPLAY_DIR = () => join(resolveProjectRoot(), ".agent-trail", "replays");
+const REPLAY_DIR = () => join(resolveProjectRoot(), ".inventarium", "replays");
 const MAX_BYTES  = 5 * 1024 * 1024; // per-file cap
 const DEFAULT_RETENTION_DAYS = 30;
 

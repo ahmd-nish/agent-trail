@@ -182,14 +182,14 @@ Reviews uncommitted changes. As above. Tags: `review, quality`.
 
 ### The bar
 Before shipping each:
-- Run it on 3 real repos (yours, agent-trail itself, one open-source project of your choice)
+- Run it on 3 real repos (yours, inventarium itself, one open-source project of your choice)
 - The output must be something you'd use in your own workflow
 - If it's not, fix the prompt or cut the agent
 
 A mediocre `pr-reviewer.md` is worse than no `pr-reviewer.md`. Set the bar high.
 
 ### Acceptance
-- Each agent runs end-to-end on agent-trail itself without erroring
+- Each agent runs end-to-end on inventarium itself without erroring
 - Each produces a meaningfully useful output (judged by you)
 - Each is under 80 lines of markdown
 
@@ -397,8 +397,8 @@ packages/web/src/lib/api.ts                      ← agents/skills client
 - [ ] 4 bundled skills similarly discoverable
 - [ ] Task creation UI has working agent + skill pickers with fuzzy search
 - [ ] Assigned subagents appear in the system prompt
-- [ ] All 6 agents tested on agent-trail itself + 1 external repo each
-- [ ] At least one task in the agent-trail repo uses one of the bundled agents to do real work this week (dogfood)
+- [ ] All 6 agents tested on inventarium itself + 1 external repo each
+- [ ] At least one task in the inventarium repo uses one of the bundled agents to do real work this week (dogfood)
 - [ ] `bun test` passes
 - [ ] Tagged `git tag v0.2.0-week-2`
 - [ ] Week-2 review doc written

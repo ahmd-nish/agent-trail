@@ -8,12 +8,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { resolveHomeStateDir } from "../../core/src/storage/paths.ts";
 
-const STATE_DIR = join(homedir(), ".agent-trail");
+const STATE_DIR = resolveHomeStateDir();
 const LEGACY_STATE_DIR = join(homedir(), ".vibe-board");
 const STATE_FILE = join(STATE_DIR, "runner-state.json");
 
-// One-time migration: move ~/.vibe-board/ → ~/.agent-trail/ if the new dir
+// One-time migration: move ~/.vibe-board/ → ~/.inventarium/ if the new dir
 // doesn't exist yet. Best-effort — runner state is non-critical (worst case
 // the user re-starts a couple of dev servers).
 if (!existsSync(STATE_DIR) && existsSync(LEGACY_STATE_DIR)) {

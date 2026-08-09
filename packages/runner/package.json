@@ -1,14 +1,14 @@
 {
-  "name": "@agent-trail/runner",
+  "name": "@inventarium/runner",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Headless runner service for agent-trail.",
+  "description": "Headless runner service for inventarium.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "url": "https://github.com/ahmd-nish/inventarium.git",
     "directory": "packages/runner"
   },
-  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
+  "homepage": "https://github.com/ahmd-nish/inventarium#readme",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {

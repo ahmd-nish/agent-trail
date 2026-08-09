@@ -77,11 +77,11 @@ describe("task memory — PRD §4.4 (§D slice)", () => {
     }
   });
 
-  test("memories live under .agent-trail/context/memories/", () => {
+  test("memories live under .inventarium/context/memories/", () => {
     const root = mkdtempSync(join(tmpdir(), "at-mem-"));
     try {
       const dir = memoriesDir(root);
-      expect(dir.endsWith(join(".agent-trail", "context", "memories"))).toBe(true);
+      expect(dir.endsWith(join(".inventarium", "context", "memories"))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

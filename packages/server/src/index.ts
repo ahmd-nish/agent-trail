@@ -23,14 +23,18 @@ import { testHistoryRouter } from "./routes/test-history.ts";
 import { devServerRouter } from "./routes/dev-server.ts";
 import { getDb } from "./db.ts";
 import { executionManager } from "./execution-manager.ts";
-import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
+import { resolveDbPath, resolveProjectRoot, migrateLegacyPaths } from "../../core/src/storage/paths.ts";
 import { hydrateFromFile, startAutoSync } from "../../core/src/context/sync.ts";
 
-const RUNNER_URL = process.env["AGENT_TRAIL_RUNNER_URL"] ?? process.env["VIBE_BOARD_RUNNER_URL"] ?? "http://localhost:3003";
-// AGENT_TRAIL_PROJECT_ROOT overrides the cwd-derived root. This is the knob
+// Rename vibe-board / agent-trail data to the current name before any
+// code joins a hardcoded path. Idempotent and best-effort.
+migrateLegacyPaths();
+
+const RUNNER_URL = process.env["INVENTARIUM_RUNNER_URL"] ?? process.env["AGENT_TRAIL_RUNNER_URL"] ?? "http://localhost:3003";
+// INVENTARIUM_PROJECT_ROOT overrides the cwd-derived root. This is the knob
 // that lets sandboxes / demos / tests aim state.json at a specific directory
 // independent of where the server was launched from.
-const PROJECT_ROOT = process.env["AGENT_TRAIL_PROJECT_ROOT"] ?? resolveProjectRoot();
+const PROJECT_ROOT = process.env["INVENTARIUM_PROJECT_ROOT"] ?? resolveProjectRoot();
 const RUNNER_ENTRY = join(import.meta.dir, "../../runner/src/index.ts");
 const WEB_DIST_CANDIDATES = [
   join(import.meta.dir, "../../web/dist"),
@@ -40,8 +44,8 @@ const WEB_DIST_CANDIDATES = [
 const WEB_DIST = WEB_DIST_CANDIDATES.find((p) => existsSync(join(p, "index.html")));
 
 async function ensureRunner(): Promise<void> {
-  if (process.env["AGENT_TRAIL_SKIP_RUNNER"] === "1") {
-    // Tests + `npx agent-trail` on machines without dev-server needs opt out.
+  if (process.env["INVENTARIUM_SKIP_RUNNER"] === "1") {
+    // Tests + `npx inventarium` on machines without dev-server needs opt out.
     return;
   }
   try {
@@ -82,8 +86,8 @@ app.get("/api/health", (c) => c.json({ ok: true, ts: new Date().toISOString() })
 // Routers
 app.route("/api/boards", boardsRouter);
 // §4.6 relay — mounted at root, not under /api, because it is a distinct
-// protocol surface consumed by other agent-trail installs rather than by the
-// local UI. Disabled unless AGENT_TRAIL_RELAY_TOKEN is set.
+// protocol surface consumed by other inventarium installs rather than by the
+// local UI. Disabled unless INVENTARIUM_RELAY_TOKEN is set.
 app.route("/", relayRouter);
 app.route("/api", knowledgeGraphRouter);
 app.route("/api", tasksRouter);
@@ -152,7 +156,7 @@ if (WEB_DIST) {
     });
   });
 } else {
-  console.log("[server] web dist not found — run `bun run -F @agent-trail/web build` or use vite on :5173");
+  console.log("[server] web dist not found — run `bun run -F @inventarium/web build` or use vite on :5173");
 }
 
 // Initialize DB on startup + recover orphan executions from a prior crash.
@@ -161,32 +165,32 @@ executionManager.recoverFromCrash();
 ensureRunner();
 
 // PRD_OPEN_SOURCE §3.1 — team-context sync. Hydrate the DB from
-// `.agent-trail/state.json` (a teammate cloned the repo and is booting for
+// `.inventarium/state.json` (a teammate cloned the repo and is booting for
 // the first time), then start the auto-writer so future mutations flow back
 // to disk. Both are no-ops when the file doesn't exist / nothing changed.
 //
 // Isolation contract:
-//   - AGENT_TRAIL_SKIP_HYDRATE=1     → skip hydration entirely
-//   - AGENT_TRAIL_SKIP_AUTOSYNC=1    → skip the write-back tick (already existed)
-//   - Safety net: if AGENT_TRAIL_DB_PATH points *outside* PROJECT_ROOT, refuse
+//   - INVENTARIUM_SKIP_HYDRATE=1     → skip hydration entirely
+//   - INVENTARIUM_SKIP_AUTOSYNC=1    → skip the write-back tick (already existed)
+//   - Safety net: if INVENTARIUM_DB_PATH points *outside* PROJECT_ROOT, refuse
 //     to hydrate/autosync — a sandbox at /tmp/x/db.sqlite must not inherit or
 //     stomp on the real repo's state.json. Warn with a fix-it message.
-const skipHydrate = process.env["AGENT_TRAIL_SKIP_HYDRATE"] === "1";
-const skipAutosync = process.env["AGENT_TRAIL_SKIP_AUTOSYNC"] === "1";
-// If AGENT_TRAIL_PROJECT_ROOT is set the user has explicitly bound the DB
+const skipHydrate = process.env["INVENTARIUM_SKIP_HYDRATE"] === "1";
+const skipAutosync = process.env["INVENTARIUM_SKIP_AUTOSYNC"] === "1";
+// If INVENTARIUM_PROJECT_ROOT is set the user has explicitly bound the DB
 // to a project, so honor it. Otherwise fall back to the disjoint-paths
-// safety net which catches the naive "AGENT_TRAIL_DB_PATH=/tmp/..." case.
-const projectRootExplicit = process.env["AGENT_TRAIL_PROJECT_ROOT"] !== undefined;
+// safety net which catches the naive "INVENTARIUM_DB_PATH=/tmp/..." case.
+const projectRootExplicit = process.env["INVENTARIUM_PROJECT_ROOT"] !== undefined;
 const stateJsonAllowed = skipHydrate
   ? false
   : projectRootExplicit || dbBelongsToProject(PROJECT_ROOT);
 if (skipHydrate) {
-  console.log("[state-sync] AGENT_TRAIL_SKIP_HYDRATE=1 — hydration skipped");
+  console.log("[state-sync] INVENTARIUM_SKIP_HYDRATE=1 — hydration skipped");
 } else if (!stateJsonAllowed) {
   console.warn(
-    `[state-sync] SKIPPING hydrate — DB (${process.env["AGENT_TRAIL_DB_PATH"] ?? resolveDbPath(PROJECT_ROOT)}) is not inside ` +
-    `project root (${PROJECT_ROOT}). Set AGENT_TRAIL_PROJECT_ROOT to bind them, or ` +
-    `AGENT_TRAIL_SKIP_HYDRATE=1 to silence this.`,
+    `[state-sync] SKIPPING hydrate — DB (${process.env["INVENTARIUM_DB_PATH"] ?? resolveDbPath(PROJECT_ROOT)}) is not inside ` +
+    `project root (${PROJECT_ROOT}). Set INVENTARIUM_PROJECT_ROOT to bind them, or ` +
+    `INVENTARIUM_SKIP_HYDRATE=1 to silence this.`,
   );
 } else {
   try {
@@ -201,17 +205,17 @@ if (skipHydrate) {
   }
 }
 if (!skipAutosync && stateJsonAllowed) {
-  const intervalMs = Number(process.env["AGENT_TRAIL_AUTOSYNC_MS"] ?? 2000);
+  const intervalMs = Number(process.env["INVENTARIUM_AUTOSYNC_MS"] ?? 2000);
   startAutoSync(db, PROJECT_ROOT, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 2000);
 }
 
 // Returns true when the DB the server is writing to sits inside the project
 // root the server is hydrating from. False = disjoint locations; either the
-// caller has explicitly opted into a sandbox (AGENT_TRAIL_DB_PATH set to a
+// caller has explicitly opted into a sandbox (INVENTARIUM_DB_PATH set to a
 // scratch dir) or something is misconfigured. Either way, skipping the sync
-// is the safe default — the user can opt back in via AGENT_TRAIL_PROJECT_ROOT.
+// is the safe default — the user can opt back in via INVENTARIUM_PROJECT_ROOT.
 function dbBelongsToProject(projectRoot: string): boolean {
-  const explicitDbPath = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
+  const explicitDbPath = process.env["INVENTARIUM_DB_PATH"] ?? process.env["AGENT_TRAIL_DB_PATH"];
   if (!explicitDbPath) return true; // implicit default — DB sits under projectRoot by construction
   try {
     const dbDir = realpathSync(dirname(resolve(explicitDbPath)));
@@ -225,7 +229,7 @@ function dbBelongsToProject(projectRoot: string): boolean {
   }
 }
 
-const port = Number(process.env["AGENT_TRAIL_PORT"] ?? process.env["PORT"] ?? 3002);
-console.log(`agent-trail server running on http://localhost:${port}`);
+const port = Number(process.env["INVENTARIUM_PORT"] ?? process.env["PORT"] ?? 3002);
+console.log(`inventarium server running on http://localhost:${port}`);
 
 export default { port, fetch: app.fetch };

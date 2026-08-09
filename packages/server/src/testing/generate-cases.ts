@@ -164,7 +164,7 @@ export async function generateCasesWithAgent(
     return {
       cases: coerced,
       usage: { inputTokens: 0, outputTokens: 0 },
-      source: process.env["AGENT_TRAIL_CASE_GEN_MOCK"] ? "mock" : "agent",
+      source: process.env["INVENTARIUM_CASE_GEN_MOCK"] ? "mock" : "agent",
     };
   }
   throw lastError ?? new Error("Case generator failed after retries");
@@ -201,7 +201,7 @@ function compactCase(tc: TestCase): Partial<TestCase> {
 export function makeClaudeCaseGenRunner(): GeneratorRunner {
   return {
     run: async (prompt) => {
-      const mock = process.env["AGENT_TRAIL_CASE_GEN_MOCK"];
+      const mock = process.env["INVENTARIUM_CASE_GEN_MOCK"];
       if (mock) {
         if (mock.startsWith("file:")) return await Bun.file(mock.slice(5)).text();
         void prompt;

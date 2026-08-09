@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 
-// PRD_OPEN_SOURCE 3.4 — the L0 constitution (CLAUDE.md + .agent-trail/context/*.md)
+// PRD_OPEN_SOURCE 3.4 — the L0 constitution (CLAUDE.md + .inventarium/context/*.md)
 // is loaded per-execution and prepended to the system prompt.
 //
 // The mock adapter's `echoSystemPrompt` flag prepends an assistant text event
@@ -80,24 +80,24 @@ describe("constitution injection E2E — PRD 3.4", () => {
 
     // Seed a CLAUDE.md at the project root + a context file.
     writeFileSync(join(tmp, "CLAUDE.md"), "PROJECT LAW: bun-only, TypeScript strict.", "utf8");
-    mkdirSync(join(tmp, ".agent-trail", "context"), { recursive: true });
+    mkdirSync(join(tmp, ".inventarium", "context"), { recursive: true });
     writeFileSync(
-      join(tmp, ".agent-trail", "context", "conventions.md"),
+      join(tmp, ".inventarium", "context", "conventions.md"),
       "TEAM CONVENTION: reviewer must be tagged before merge.",
       "utf8",
     );
 
     port = await findFreePort();
-    dbPath = join(tmp, "agent-trail.db");
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    dbPath = join(tmp, "inventarium.db");
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_CLAUDE_MOCK: ECHO_SCENARIO,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_CLAUDE_MOCK: ECHO_SCENARIO,
       },
       stdio: "ignore",
     });
@@ -143,7 +143,7 @@ describe("constitution injection E2E — PRD 3.4", () => {
     expect(prompt).toContain("## Team constitution");
     expect(prompt).toContain("=== CLAUDE.md ===");
     expect(prompt).toContain("PROJECT LAW: bun-only");
-    expect(prompt).toContain("=== .agent-trail/context/conventions.md ===");
+    expect(prompt).toContain("=== .inventarium/context/conventions.md ===");
     expect(prompt).toContain("TEAM CONVENTION: reviewer");
   }, 20000);
 });

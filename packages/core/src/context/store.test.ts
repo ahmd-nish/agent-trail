@@ -119,8 +119,8 @@ describe("context store — PRD 3.2/3.3/3.4", () => {
       const c = loadConstitution(root);
       expect(c.content).toContain("=== CLAUDE.md ===");
       expect(c.content).toContain("Root of the project");
-      expect(c.content).toContain("=== .agent-trail/context/architecture.md ===");
-      expect(c.content).toContain("=== .agent-trail/context/conventions.md ===");
+      expect(c.content).toContain("=== .inventarium/context/architecture.md ===");
+      expect(c.content).toContain("=== .inventarium/context/conventions.md ===");
       // Ordering: CLAUDE.md first, then context files alphabetically.
       const idxRoot = c.content.indexOf("=== CLAUDE.md ===");
       const idxArch = c.content.indexOf("architecture.md ===");

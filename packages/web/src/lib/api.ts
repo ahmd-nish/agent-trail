@@ -360,7 +360,7 @@ export interface TestRunResult {
   /** Tests that actually executed (pass + fail). Excludes skipped. */
   executedCount: number;
   ranSomething: boolean;
-  /** True when the task had no worktree_path and the runner fell back to agent-trail's own repo root. */
+  /** True when the task had no worktree_path and the runner fell back to inventarium's own repo root. */
   usedFallbackCwd?: boolean;
 }
 

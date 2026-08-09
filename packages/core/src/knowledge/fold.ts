@@ -53,7 +53,7 @@ const SECTION_ORDER: EventType[] = [
 /**
  * Fold the active event log into a constitution — the L0 prompt injection
  * that every claude spawn sees. Replaces loadConstitution()'s alphabetical
- * concatenation of `.agent-trail/context/*.md` (§3.1 correctness bug).
+ * concatenation of `.inventarium/context/*.md` (§3.1 correctness bug).
  */
 export function foldConstitution(db: Database, opts: FoldConstitutionOptions = {}): FoldedConstitution {
   const cap = opts.charCap ?? DEFAULT_CAP;

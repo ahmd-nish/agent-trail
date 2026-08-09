@@ -4,18 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encryptSecret, decryptSecret, getMasterKey, maskSecret, _resetKeyCache } from "./secrets.ts";
 
-// Use a throwaway directory + key file so the user's real ~/.agent-trail/master.key
+// Use a throwaway directory + key file so the user's real ~/.inventarium/master.key
 // is never read or modified by this test.
-const tmp = mkdtempSync(join(tmpdir(), "agent-trail-secrets-"));
+const tmp = mkdtempSync(join(tmpdir(), "inventarium-secrets-"));
 const keyPath = join(tmp, "master.key");
 
 beforeAll(() => {
-  process.env["AGENT_TRAIL_SECRET_KEY_PATH"] = keyPath;
+  process.env["INVENTARIUM_SECRET_KEY_PATH"] = keyPath;
 });
 
 afterAll(() => {
   try { rmSync(tmp, { recursive: true, force: true }); } catch { /* noop */ }
-  delete process.env["AGENT_TRAIL_SECRET_KEY_PATH"];
+  delete process.env["INVENTARIUM_SECRET_KEY_PATH"];
 });
 
 beforeEach(() => {

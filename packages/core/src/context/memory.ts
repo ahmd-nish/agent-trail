@@ -9,7 +9,7 @@ import { contextDir } from "./store.ts";
 // context pack instead of full transcripts — the "strategic context per
 // task" USP.
 //
-// The memory file is stored under `.agent-trail/context/memories/<taskId>.md`
+// The memory file is stored under `.inventarium/context/memories/<taskId>.md`
 // so it round-trips through git alongside the rest of the team context. Team
 // members inherit each other's task memories on `git pull`.
 

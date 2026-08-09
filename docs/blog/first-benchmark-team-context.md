@@ -1,6 +1,6 @@
 # We built the first benchmark for team context layers — here are the numbers
 
-**TL;DR** — projectmem's own paper (arXiv 2606.12329) flags the missing controlled repeat-failure benchmark as the single most valuable next result its category could produce. We ran the first one. The report is in `agent-trail knowledge bench`; the harness is MIT-licensed; the numbers are below.
+**TL;DR** — projectmem's own paper (arXiv 2606.12329) flags the missing controlled repeat-failure benchmark as the single most valuable next result its category could produce. We ran the first one. The report is in `inventarium knowledge bench`; the harness is MIT-licensed; the numbers are below.
 
 ---
 
@@ -30,11 +30,11 @@ Working from `docs/knowledgelayer.md` §5.3, five metrics tell you if a team-con
 
 ## What we can measure today
 
-The harness lives in `packages/core/src/knowledge/bench.ts`. Everything that can be computed from `agent-trail`'s existing telemetry surface — tasks, executions, iteration_memories, knowledge_events — is in the report.
+The harness lives in `packages/core/src/knowledge/bench.ts`. Everything that can be computed from `inventarium`'s existing telemetry surface — tasks, executions, iteration_memories, knowledge_events — is in the report.
 
 Everything that requires a **seeded corpus** (the A/B against dump-mode) is deferred with a note. Everything that requires **prompt-caching telemetry** from the adapter is deferred with a note. Publishing partial numbers with clear provenance beats publishing extrapolated numbers with impressive-looking decimals.
 
-## The numbers, from `agent-trail`'s own repo
+## The numbers, from `inventarium`'s own repo
 
 Single-actor run over the last 30 days on the workspace where the tool is being *built*:
 
@@ -50,7 +50,7 @@ Risk coverage 0.0%  (tasks whose paths overlap a prior failed_attempt/gotcha)
 
 Two things stand out and both are honest signals:
 
-1. **304k input tokens per execution average.** That's the number `agent-trail` exists to attack. The three-band prompt with an explicit cache breakpoint (§4.4) should collapse the stable portion of that to 0.10× on cached reads. A/B numbers land when the seeded corpus does.
+1. **304k input tokens per execution average.** That's the number `inventarium` exists to attack. The three-band prompt with an explicit cache breakpoint (§4.4) should collapse the stable portion of that to 0.10× on cached reads. A/B numbers land when the seeded corpus does.
 
 2. **0 knowledge events, 0% context reuse, 0% risk coverage.** Because I'm the only person on this DB, and I haven't backfilled decisions.md yet. This is the shape of every single-actor run. It's a valid data point — the multiplayer metric is *supposed* to be 0 for solo users. It's the number that moves the moment a second teammate joins the workspace.
 
@@ -59,7 +59,7 @@ Two things stand out and both are honest signals:
 Two teammates on a shared workspace, one week of work, both using the layer:
 
 - Context-reuse rate jumps from 0% to whatever fraction of tasks consume a fact the other person authored. In the small-team simulations we've run internally, this settles around 15–35% depending on how much the team overlaps functionally.
-- Risk coverage jumps from 0% to a real number the moment `agent-trail knowledge backfill` runs — every prior verify_tests failure, thrash, or answered decision ticket becomes a candidate warning on paths any teammate touches.
+- Risk coverage jumps from 0% to a real number the moment `inventarium knowledge backfill` runs — every prior verify_tests failure, thrash, or answered decision ticket becomes a candidate warning on paths any teammate touches.
 
 Those are the two numbers the doc calls out as the multiplayer differentiator, and they're the ones we'll report first once the design partners we're recruiting via Show HN are in.
 
@@ -69,17 +69,17 @@ Those are the two numbers the doc calls out as the multiplayer differentiator, a
 
 **Discovery tool-call count.** The `telemetry_events` table records every tool call an agent makes, but classifying "exploratory grep before the first edit" vs "targeted read after a plan" requires a heuristic we haven't validated. Reporting the count without the classification would inflate.
 
-**Token savings vs a naive baseline.** Requires the seeded corpus. If you build the corpus and want to run the A/B, `agent-trail knowledge bench --json` gives you the machine-readable side; you supply the baseline.
+**Token savings vs a naive baseline.** Requires the seeded corpus. If you build the corpus and want to run the A/B, `inventarium knowledge bench --json` gives you the machine-readable side; you supply the baseline.
 
 ## Try it
 
 ```
-bunx @agent-trail/cli knowledge bench --days 30
+bunx inventarium knowledge bench --days 30
 ```
 
 The output is above. If you have a shared workspace with a teammate, the context-reuse and risk-coverage numbers will be non-zero — those are the ones we're most interested in seeing from other teams.
 
 If you run the benchmark on your team's workspace, drop the JSON output in a GitHub issue on the repo. Not for us to grade you — for the harness to see numbers from a shape of team we don't have (2, 3, 5, 8 people). That's how the category-wide benchmark projectmem asked for actually gets built.
 
-**Harness:** [packages/core/src/knowledge/bench.ts](https://github.com/ahmd-nish/agent-trail/blob/main/packages/core/src/knowledge/bench.ts)
-**Plan doc §5.3:** [docs/knowledgelayer.md](https://github.com/ahmd-nish/agent-trail/blob/main/docs/knowledgelayer.md)
+**Harness:** [packages/core/src/knowledge/bench.ts](https://github.com/ahmd-nish/inventarium/blob/main/packages/core/src/knowledge/bench.ts)
+**Plan doc §5.3:** [docs/knowledgelayer.md](https://github.com/ahmd-nish/inventarium/blob/main/docs/knowledgelayer.md)

@@ -3,11 +3,11 @@
 # GitHub issues, labelled `good first issue`. Idempotent-ish: run once.
 #
 # Prereq: `gh auth status` must show you logged in with `repo` scope.
-# Verify with: gh label list --repo ahmd-nish/agent-trail
+# Verify with: gh label list --repo ahmd-nish/inventarium
 
 set -euo pipefail
 
-REPO="${GH_REPO:-ahmd-nish/agent-trail}"
+REPO="${GH_REPO:-ahmd-nish/inventarium}"
 LABEL="good first issue"
 
 create() {
@@ -42,7 +42,7 @@ create "Add a \`--version\` flag to the CLI" "\
 
 Source: [.github/GOOD_FIRST_ISSUES.md](../blob/main/.github/GOOD_FIRST_ISSUES.md#5)"
 
-create "Colorize the \`agent-trail status\` output by column count" "\
+create "Colorize the \`inventarium status\` output by column count" "\
 \`cmdStatus\` in \`packages/cli/src/index.ts\` prints status counts. If \`in_progress > 0\`, green the number; if \`blocked > 0\`, red. Uses the existing \`c.*\` ANSI helpers.
 
 Source: [.github/GOOD_FIRST_ISSUES.md](../blob/main/.github/GOOD_FIRST_ISSUES.md#6)"
@@ -62,7 +62,7 @@ When a task has a \`git_diff\` artifact, the task detail shows the content. Add 
 
 Source: [.github/GOOD_FIRST_ISSUES.md](../blob/main/.github/GOOD_FIRST_ISSUES.md#9)"
 
-create "Add an \`agent-trail export <boardId>\` CLI subcommand" "\
+create "Add an \`inventarium export <boardId>\` CLI subcommand" "\
 The server has \`/api/boards/:id/export\`. Wire a CLI subcommand that writes the JSON to stdout so users can pipe boards into other tools. Follow the \`cmdStatus\` / \`cmdPlan\` shape in the CLI.
 
 Source: [.github/GOOD_FIRST_ISSUES.md](../blob/main/.github/GOOD_FIRST_ISSUES.md#10)"

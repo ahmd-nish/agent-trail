@@ -11,7 +11,7 @@ Live plans: [`knowledgelayer.md`](./knowledgelayer.md) · [`knowledgelayer-v2.md
 ### Invite links (preferred over OAuth)
 
 ```
-admin:     agent-trail workspace invite acme --role member  →  https://relay/join/ONCE-abc123
+admin:     inventarium workspace invite acme --role member  →  https://relay/join/ONCE-abc123
 teammate:  opens it, a token is minted in their browser, the link burns
 ```
 
@@ -51,7 +51,7 @@ Deferred per §6: the category's own evidence is that structure beats similarity
 BM25 + structural seeding covers the cases we have. Revisit when measurement shows a gap.
 
 ### §3.3 — the unfamiliar-repo benchmark
-The Phase 1 adapter decision is **corpus-bound**: measured on agent-trail itself, where
+The Phase 1 adapter decision is **corpus-bound**: measured on inventarium itself, where
 discovery headroom is already near zero (Grep 1, Glob 20 across 38 executions). The
 discovery-tool-call delta was deliberately not reported for that reason. Re-run against one
 unfamiliar 10k-file repo before quoting any number publicly.
@@ -76,10 +76,10 @@ sync protocol rather than inside it, and they are the demo. Blocked on nothing t
 §7.1 ranks "build for months and never launch" first, and it has not moved. All four are
 scripted and unrun; each needs Nish's auth, not more code:
 
-- [ ] `bun publish` for `@agent-trail/{cli,core,server}` — all four npm names still 404
+- [ ] `bun publish` for `@inventarium/{cli,core,server}` — all four npm names still 404
 - [ ] GitHub release for v1.0.0
 - [ ] 10 good-first-issues
-- [ ] Clean-machine E2E: `npx agent-trail` verified on a non-Nish machine
+- [ ] Clean-machine E2E: `npx inventarium` verified on a non-Nish machine
 
 The Week 10 gate — *≥2 non-Nish teams have run a real task through a shared board* — is
 reachable today with admin-provisioned tokens. It does not need OAuth.

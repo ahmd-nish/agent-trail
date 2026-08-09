@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-/** Health-check each agent-trail process and report what's running. */
+/** Health-check each inventarium process and report what's running. */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -35,7 +35,7 @@ for (const r of results) {
 }
 
 // Detached dev servers tracked by the runner
-const stateFile = join(homedir(), ".agent-trail", "runner-state.json");
+const stateFile = join(homedir(), ".inventarium", "runner-state.json");
 if (existsSync(stateFile)) {
   try {
     const state = JSON.parse(readFileSync(stateFile, "utf-8")) as {

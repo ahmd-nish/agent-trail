@@ -13,8 +13,8 @@
 // request may touch is DERIVED FROM THE CREDENTIAL — never read from the
 // request body or query string. See workspace.ts.
 //
-// AGENT_TRAIL_RELAY_TOKEN survives as a single-workspace bootstrap secret,
-// pinned to AGENT_TRAIL_RELAY_WORKSPACE and granted `member` (not `admin`), so
+// INVENTARIUM_RELAY_TOKEN survives as a single-workspace bootstrap secret,
+// pinned to INVENTARIUM_RELAY_WORKSPACE and granted `member` (not `admin`), so
 // it can carry a self-hosted install without becoming a master key.
 
 import { Hono } from "hono";
@@ -43,8 +43,8 @@ type AuthErr = { ok: false; status: 401 | 403 | 503; body: { error: string } };
  * The previous shared-secret model accepted a `workspaceId` in the body and
  * believed it, so one token could read or write every workspace on the relay.
  *
- * `AGENT_TRAIL_RELAY_TOKEN` is still honoured for single-workspace self-hosting,
- * but it is now pinned to `AGENT_TRAIL_RELAY_WORKSPACE` (default "local") and
+ * `INVENTARIUM_RELAY_TOKEN` is still honoured for single-workspace self-hosting,
+ * but it is now pinned to `INVENTARIUM_RELAY_WORKSPACE` (default "local") and
  * therefore cannot reach any other workspace. It grants `member`, not `admin` —
  * a bootstrap secret should never be able to change who else has access.
  */
@@ -53,8 +53,8 @@ function requireAuth(
   required: Role,
 ): AuthOk | AuthErr {
   const presented = bearerFrom(c.req.header("authorization"));
-  const legacy = process.env["AGENT_TRAIL_RELAY_TOKEN"]?.trim();
-  const legacyWorkspace = process.env["AGENT_TRAIL_RELAY_WORKSPACE"]?.trim() || "local";
+  const legacy = process.env["INVENTARIUM_RELAY_TOKEN"]?.trim();
+  const legacyWorkspace = process.env["INVENTARIUM_RELAY_WORKSPACE"]?.trim() || "local";
 
   if (legacy && presented && presented.length === legacy.length && presented === legacy) {
     if (required === "admin" || required === "owner") {
@@ -77,7 +77,7 @@ function requireAuth(
   // A relay with no credential system configured at all should say so rather
   // than look like a rejected login.
   if (res.reason === "no_token" && !legacy && !anyTokensExist()) {
-    return { ok: false, status: 503, body: { error: "relay has no credentials configured — run `agent-trail workspace token create`" } };
+    return { ok: false, status: 503, body: { error: "relay has no credentials configured — run `inventarium workspace token create`" } };
   }
   return { ok: false, status: statusForFailure(res.reason), body: { error: res.reason } };
 }
@@ -188,7 +188,7 @@ relayRouter.get("/v1/events/stream", (c) => {
   const workspace = auth.ctx.workspaceId;
   const project = c.req.query("project") ?? "local";
   let cursor = c.req.query("since") ?? "";
-  const intervalMs = Number(process.env["AGENT_TRAIL_RELAY_POLL_MS"] ?? 1000);
+  const intervalMs = Number(process.env["INVENTARIUM_RELAY_POLL_MS"] ?? 1000);
 
   const stream = new ReadableStream({
     start(controller) {

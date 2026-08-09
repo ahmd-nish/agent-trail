@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getDb } from "../db.ts";
 
 // PRD_TESTING T5.1 + T5.2 — test-history / test-cases export + retention.
-// Bidirectional sync to `.agent-trail/tests.json` is teased here as JSON
+// Bidirectional sync to `.inventarium/tests.json` is teased here as JSON
 // export + import against the same shape; a filesystem watcher lives in a
 // later phase.
 
@@ -41,7 +41,7 @@ testHistoryRouter.get("/tasks/:taskId/test-runs.:format", (c) => {
 });
 
 // T5.2 — prune run rows older than the retention window. POST is intentional
-// so it's not accidentally hit by a browser; scheduled agent-trail loops can
+// so it's not accidentally hit by a browser; scheduled inventarium loops can
 // call it daily.
 testHistoryRouter.post("/tasks/:taskId/test-runs/prune", async (c) => {
   const { taskId } = c.req.param();
@@ -57,7 +57,7 @@ testHistoryRouter.post("/tasks/:taskId/test-runs/prune", async (c) => {
 });
 
 // T5.1 — export the task's test cases (JSON blob on the task row) so a repo
-// can commit `.agent-trail/tests.json` and diff future changes.
+// can commit `.inventarium/tests.json` and diff future changes.
 testHistoryRouter.get("/tasks/:taskId/tests-export", (c) => {
   const { taskId } = c.req.param();
   const db = getDb();

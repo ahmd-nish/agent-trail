@@ -2,7 +2,7 @@
 
 Every knowledge product in software history dies on the same rock: **nobody writes the docs.** Byterover, BuildBetter CLI, projectmem, Cursor rules, AGENTS.md — every one of them requires a human to stop doing work and author a memory. Every one of them has fewer active memories than users. Every one of them is stuck at zero-network-effect because the network effect only kicks in *after* the docs get written, and the docs never get written.
 
-agent-trail is structurally different. Its execution loop *already* generates exactly the five event types a team-knowledge layer needs, as a byproduct of running:
+inventarium is structurally different. Its execution loop *already* generates exactly the five event types a team-knowledge layer needs, as a byproduct of running:
 
 | Knowledge event | Where it comes from |
 |---|---|
@@ -141,4 +141,4 @@ Everything above ships today, tested, in the `packages/core/src/knowledge/` modu
 
 ---
 
-If you're on a team already running Claude Code together and any of this sounds like it would remove pain you have: `bunx @agent-trail/cli --demo`, or reach out on the repo. Design-partner slots are what unblocks Weeks 9-10's multi-actor benchmark.
+If you're on a team already running Claude Code together and any of this sounds like it would remove pain you have: `bunx inventarium --demo`, or reach out on the repo. Design-partner slots are what unblocks Weeks 9-10's multi-actor benchmark.

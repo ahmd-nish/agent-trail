@@ -3,12 +3,12 @@
  * Returns the raw text result from Claude's response.
  */
 export async function runClaudePlanner(prompt: string): Promise<string> {
-  // Test-only escape hatch: when AGENT_TRAIL_PLANNER_MOCK is set, treat the
+  // Test-only escape hatch: when INVENTARIUM_PLANNER_MOCK is set, treat the
   // value as either a JSON graph (fixture) or, if it starts with "file:", a
   // path to read. Lets server-level E2E tests exercise the plan pipeline
   // without a real claude CLI or an API key. Keeps `prompt` intentionally
   // unused — mocks don't care what we would have sent.
-  const mock = process.env["AGENT_TRAIL_PLANNER_MOCK"];
+  const mock = process.env["INVENTARIUM_PLANNER_MOCK"];
   if (mock) {
     if (mock.startsWith("file:")) {
       const path = mock.slice(5);

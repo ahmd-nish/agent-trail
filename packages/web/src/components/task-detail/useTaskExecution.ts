@@ -49,7 +49,7 @@ export function useTaskExecution(task: Task | null, onUpdated: (t: Task) => void
       if (e.type === "tool_call") sounds.click();
       if (e.type === "awaiting_human") {
         sounds.ask();
-        notify({ title: "agent-trail — human decision needed", body: t.title, tag: `ask-${t.id}`, requireInteraction: true });
+        notify({ title: "inventarium — human decision needed", body: t.title, tag: `ask-${t.id}`, requireInteraction: true });
       }
       if (e.type === "execution_complete") {
         sounds.complete(e.status === "completed");

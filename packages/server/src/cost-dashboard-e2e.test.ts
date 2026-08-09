@@ -72,16 +72,16 @@ describe("cost dashboard — PRD §4.6", () => {
     workDir = join(tmp, "work");
     mkdirSync(workDir, { recursive: true });
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_SKIP_AUTOSYNC: "1",
-        AGENT_TRAIL_CLAUDE_MOCK: MOCK,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_SKIP_AUTOSYNC: "1",
+        INVENTARIUM_CLAUDE_MOCK: MOCK,
       },
       stdio: "ignore",
     });

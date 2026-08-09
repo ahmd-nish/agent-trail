@@ -49,9 +49,9 @@ describe("§4.2e validity oracle", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("a signature edited OUTSIDE agent-trail is detected, and named", async () => {
+  test("a signature edited OUTSIDE inventarium is detected, and named", async () => {
     // The §4.2e scenario: a rebase, a hotfix, a teammate on another tool.
-    // agent-trail did not author this change and gets no event about it.
+    // inventarium did not author this change and gets no event about it.
     const root = repo({ "src/session.ts": V1 });
     const index = new NativeCodeIndex({ root, fileListOverride: ["src/session.ts"] });
     const contract = await emit(root, ["src/session.ts"], index);

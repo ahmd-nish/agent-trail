@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 
-// PRD_OPEN_SOURCE §3.1 — `.agent-trail/` as source of truth.
+// PRD_OPEN_SOURCE §3.1 — `.inventarium/` as source of truth.
 // The board + task graph serialize to a single merge-friendly JSON file at
-// `.agent-trail/state.json`. Teammates who clone the repo and run
-// `npx agent-trail` hydrate the exact same board out of SQLite, no setup.
+// `.inventarium/state.json`. Teammates who clone the repo and run
+// `npx inventarium` hydrate the exact same board out of SQLite, no setup.
 
-const CONTEXT_DIRNAME = ".agent-trail";
+const CONTEXT_DIRNAME = ".inventarium";
 const STATE_FILENAME = "state.json";
 const STATE_SCHEMA_VERSION = 1;
 
@@ -220,7 +220,7 @@ export function deserializeAndUpsert(db: Database, state: StateFile): HydrateRes
 }
 
 // Column defaults used when hydrating a state.json produced by an older
-// agent-trail (missing columns added after export). Keeps hydration
+// inventarium (missing columns added after export). Keeps hydration
 // forward-compatible without a schema version bump per column addition.
 const BOARD_DEFAULTS: Record<string, unknown> = {
   default_assignee: "claude-code",

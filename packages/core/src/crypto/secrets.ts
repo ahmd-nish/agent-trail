@@ -1,7 +1,7 @@
 /**
  * Secret encryption for board environment variables (Phase 3b).
  *
- * Uses AES-256-GCM with a master key stored at ~/.agent-trail/master.key
+ * Uses AES-256-GCM with a master key stored at ~/.inventarium/master.key
  * (file mode 0600). On first use, the key is generated and persisted.
  *
  * Each encrypted value embeds its own random IV — same plaintext encrypts to
@@ -19,6 +19,7 @@ import { createCipheriv, createDecipheriv, randomBytes, type CipherGCM, type Dec
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { resolveHomeStateDir } from "../storage/paths.ts";
 
 const ALG = "aes-256-gcm";
 const KEY_BYTES = 32;
@@ -26,7 +27,7 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const VERSION = "v1";
 
-const STATE_DIR = join(homedir(), ".agent-trail");
+const STATE_DIR = resolveHomeStateDir();
 const KEY_PATH = join(STATE_DIR, "master.key");
 
 let cachedKey: Buffer | null = null;
@@ -35,11 +36,11 @@ let cachedKey: Buffer | null = null;
  * Load (or, on first call, generate + persist) the master key. The key file
  * is chmod'd to 0600 so only the user who created it can read it.
  *
- * Override the location via AGENT_TRAIL_SECRET_KEY_PATH for tests.
+ * Override the location via INVENTARIUM_SECRET_KEY_PATH for tests.
  */
 export function getMasterKey(): Buffer {
   if (cachedKey) return cachedKey;
-  const keyPath = process.env["AGENT_TRAIL_SECRET_KEY_PATH"] ?? KEY_PATH;
+  const keyPath = process.env["INVENTARIUM_SECRET_KEY_PATH"] ?? KEY_PATH;
   if (existsSync(keyPath)) {
     const raw = readFileSync(keyPath, "utf-8").trim();
     const buf = Buffer.from(raw, "base64");

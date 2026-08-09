@@ -9,7 +9,7 @@ import { Database } from "bun:sqlite";
 // PRD_OPEN_SOURCE 2.2 — end-to-end resume path.
 // Boot server → run one task to completion (captures a session_id) → boot
 // again → call POST /tasks/:id/resume → verify a new execution row is
-// created and completes. Uses AGENT_TRAIL_CLAUDE_MOCK to drive both.
+// created and completes. Uses INVENTARIUM_CLAUDE_MOCK to drive both.
 
 const SERVER_ENTRY = join(import.meta.dir, "index.ts");
 
@@ -71,17 +71,17 @@ describe("crash/resume E2E — PRD_OPEN_SOURCE 2.2", () => {
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), "at-resume-e2e-"));
     workDir = join(tmp, "work"); mkdirSync(workDir, { recursive: true });
-    dbPath = join(tmp, "agent-trail.db");
+    dbPath = join(tmp, "inventarium.db");
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_CLAUDE_MOCK: HAPPY_SCENARIO,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_CLAUDE_MOCK: HAPPY_SCENARIO,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

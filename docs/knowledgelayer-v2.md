@@ -1,4 +1,4 @@
-# agent-trail — Knowledge Layer v2: Consume the Code Graph, Build the Join
+# inventarium — Knowledge Layer v2: Consume the Code Graph, Build the Join
 
 **Date:** 2026-08-08 · **Owner:** Nish · **Status:** proposed
 
@@ -10,7 +10,7 @@
 
 ## 0. The one thing that changed
 
-The original plan assumed agent-trail would build its own symbol index (§4.2c) and code graph (§4.2d) with tree-sitter. Between January and June 2026 that became a commodity:
+The original plan assumed inventarium would build its own symbol index (§4.2c) and code graph (§4.2d) with tree-sitter. Between January and June 2026 that became a commodity:
 
 | Tool | Scale | Store | License | Relevance |
 |---|---|---|---|---|
@@ -25,7 +25,7 @@ Independently measured savings in the category: 97% fewer input tokens (grepai),
 Two consequences:
 
 1. **Building §4.2c/§4.2d is now building a commodity in the most crowded tier of the category.** Four tools sit between 25k and 100k stars, one is YC-backed with an enterprise shared-graph tier, and all of them do it better than a from-scratch implementation would in its first six months.
-2. **None of them touch the other half.** Every tool above derives its graph from *source code*. §4.2e already enumerates what source code cannot tell you: why a decision was made, the three approaches that failed and were never committed, who ruled on it, and when that ruling stopped being true. That is agent-trail's five capture sources, and it remains unbuilt by anyone.
+2. **None of them touch the other half.** Every tool above derives its graph from *source code*. §4.2e already enumerates what source code cannot tell you: why a decision was made, the three approaches that failed and were never committed, who ruled on it, and when that ruling stopped being true. That is inventarium's five capture sources, and it remains unbuilt by anyone.
 
 So: **consume the derived half, build the asserted half, own the join between them.**
 
@@ -51,13 +51,13 @@ Not as a store — it offers no retrieval scoring, no temporal validity, no attr
 
 ### What this unblocks
 
-The tree-sitter dependency was silently blocking §4.2e. `signature_hash` requires re-parsing changed files to re-extract the signature set; the current regex extractor is self-consistent but under-triggers, so signatures it never captured cannot change the hash — a stale contract reads as verified-current. Sourcing signatures from an external index removes that failure mode without agent-trail owning a parser.
+The tree-sitter dependency was silently blocking §4.2e. `signature_hash` requires re-parsing changed files to re-extract the signature set; the current regex extractor is self-consistent but under-triggers, so signatures it never captured cannot change the hash — a stale contract reads as verified-current. Sourcing signatures from an external index removes that failure mode without inventarium owning a parser.
 
 ---
 
 ## 2. Phase 0 — prove the loop runs at all (½ day)
 
-**This is the gate for everything below.** `knowledge_events` currently has **0 rows** in `agent-trail.db`, and `iteration_memories` has 0. The read and write sides landed in `d4bcbb5`, after the 38 executions in the database. The thesis is demonstrably real in 72 tests and has never produced a single row from a real run.
+**This is the gate for everything below.** `knowledge_events` currently has **0 rows** in `inventarium.db`, and `iteration_memories` has 0. The read and write sides landed in `d4bcbb5`, after the 38 executions in the database. The thesis is demonstrably real in 72 tests and has never produced a single row from a real run.
 
 - [x] Run one real board task end-to-end. Assert `SELECT COUNT(*) FROM knowledge_events > 0`.
 - [x] Confirm a second task's pack contains at least one event from the first.
@@ -146,16 +146,16 @@ Four rules, each load-bearing:
 > The interface and the bench are backend-agnostic — scoring either one is a
 > `resolveCodeIndex` registry entry plus one bench run, no rework.
 
-Skip GitNexus in the spike: PolyForm Noncommercial is incompatible with agent-trail's MIT distribution and the Team Cloud tier in §5.1. Note it and move on.
+Skip GitNexus in the spike: PolyForm Noncommercial is incompatible with inventarium's MIT distribution and the Team Cloud tier in §5.1. Note it and move on.
 
 ### 3.3 The measurement
 
 Run against two corpora, because one of them will lie to you:
 
-- **agent-trail itself** (~38k LOC) — the familiar-repo case.
+- **inventarium itself** (~38k LOC) — the familiar-repo case.
 - **One unfamiliar mid-size OSS repo** (10k+ files) that neither you nor the planner has seen.
 
-**The unfamiliar repo is not optional.** Live telemetry across 38 executions on agent-trail shows Bash 278, Read 232, Write 35, Glob 20, Edit 18, **Grep 1**. Discovery is already near-zero here because the planner emits `likelyPaths` and the runner uses them — you solved discovery in Phase 1–5 without a knowledge layer. Measuring "discovery → zero" on this repo will show almost no headroom and produce a number that understates the value on any repo a new teammate actually joins.
+**The unfamiliar repo is not optional.** Live telemetry across 38 executions on inventarium shows Bash 278, Read 232, Write 35, Glob 20, Edit 18, **Grep 1**. Discovery is already near-zero here because the planner emits `likelyPaths` and the runner uses them — you solved discovery in Phase 1–5 without a knowledge layer. Measuring "discovery → zero" on this repo will show almost no headroom and produce a number that understates the value on any repo a new teammate actually joins.
 
 Metrics per adapter per corpus:
 
@@ -178,7 +178,7 @@ Either way the adapter interface ships, because it is what §J joins against.
 
 > **DECISION 2026-08-08 — ship `native` as default. Do not adopt an external index yet.**
 >
-> Measured with `runCodeIndexBench`, corpus = agent-trail's own 239 tracked TS/JS files
+> Measured with `runCodeIndexBench`, corpus = inventarium's own 239 tracked TS/JS files
 > (the last 40 commits touched all of them, so the "changed files" proxy is the whole
 > codebase here). `tasks.likely_paths` was empty on all 44 rows — a consequence of the
 > Phase 0 bug — so the commit footprint is the only honest corpus available today.
@@ -217,12 +217,12 @@ Either way the adapter interface ships, because it is what §J joins against.
 > external index on a repo nobody has seen. The discovery-tool-call delta was
 > deliberately not measured here for the same reason (Grep 1 / Glob 20 across 38
 > executions leaves no headroom to recover). Treat this decision as *provisional and
-> corpus-bound*: it says native is sufficient for repos shaped like agent-trail, not
+> corpus-bound*: it says native is sufficient for repos shaped like inventarium, not
 > that external indexes are unnecessary in general.
 >
 > Shipped: `code-index.ts` (interface, URN addressing, `NativeCodeIndex`,
 > `resolveCodeIndex` with fallback-on-failure), `code-index-bench.ts` (backend-agnostic
-> scoring), 26 tests. `AGENT_TRAIL_CODE_INDEX` selects a backend; unknown or unhealthy
+> scoring), 26 tests. `INVENTARIUM_CODE_INDEX` selects a backend; unknown or unhealthy
 > names warn and fall back to native rather than failing a spawn.
 
 ---
@@ -233,7 +233,7 @@ This is the only genuinely novel graph work left, and the answer to *"if we don'
 
 ### 4.1 Schema
 
-Edges are **asserted**, not derived — they are claims about which knowledge applies where. So they live in agent-trail's log, are append-only, and sync exactly like events do.
+Edges are **asserted**, not derived — they are claims about which knowledge applies where. So they live in inventarium's log, are append-only, and sync exactly like events do.
 
 ```sql
 CREATE TABLE IF NOT EXISTS knowledge_edges (
@@ -325,21 +325,21 @@ Apply §4.2d Decision 3 without exception: **traverse to rank, then let a hard b
 
 ## 5. Phase 3 — the validity oracle, now unblocked (2 days)
 
-§4.2e as originally written, with the adapter supplying signatures instead of a tree-sitter pass agent-trail owns.
+§4.2e as originally written, with the adapter supplying signatures instead of a tree-sitter pass inventarium owns.
 
 - [x] Persist `base_sha` on every contract at emit time. The field already exists (`contracts.ts:24,80`) and is populated; nothing computes against it yet.
 - [x] Compute `signature_hash = sha256(sorted(exports ∪ routes ∪ tables ∪ env))` from the adapter's output, not from the regex extractor, and store it beside `base_sha`.
 - [x] At pack time: re-resolve signatures for `contract.paths` through the adapter, recompute the hash, compare. Equal → still valid despite file edits. Different → drifted, and you know exactly which symbols moved.
 - [x] Re-derive structure automatically on drift (free — it is one more adapter call). Leave `invariants` / `deliberatelyNotDone` empty rather than guessing; they are currently hardcoded `[]` at `contracts.ts:89-90` and a wrong invariant is worse than a missing one.
 - [x] `post-merge` hook that precomputes the answer. **Optimization only.** Correctness stays pull-based, so a fresh clone or an uninstalled hook still yields the right result.
-- [x] Commit trailers (`Agent-Trail-Contract: <id>`), not `git notes` — trailers survive rebase and cherry-pick and push by default.
+- [x] Commit trailers (`Inventarium-Contract: <id>`), not `git notes` — trailers survive rebase and cherry-pick and push by default.
 
 One correction to the original §4.3 scoring formula: it contains `× 0 if superseded_by IS NOT NULL OR contract.stale`. Until this phase lands, `contract.stale` is unimplementable, so retrieval is structurally incapable of excluding a stale contract. That term becomes real here.
 
-**Exit criteria:** edit a signature outside agent-trail, and the next pack marks the contract drifted and ships re-derived signatures.
+**Exit criteria:** edit a signature outside inventarium, and the next pack marks the contract drifted and ships re-derived signatures.
 
 > **DONE 2026-08-08.** Exit criteria met end-to-end on a real git repo: emit a contract,
-> hand-edit + commit a signature change outside agent-trail, and the next pack reports
+> hand-edit + commit a signature change outside inventarium, and the next pack reports
 > `drifted`, names the exact symbols, and ships re-derived signatures.
 >
 > ```
@@ -367,14 +367,14 @@ One correction to the original §4.3 scoring formula: it contains `× 0 if super
 >   reproducible on `native` alone — it would be measuring the extractor, not the code.
 > - **`invariants` / `deliberatelyNotDone` are never regenerated on re-derive.** They were
 >   judgements about the original code; a wrong invariant is worse than a missing one.
-> - **Commit trailers, not git notes** (`Agent-Trail-Contract: <id>`) — trailers survive
+> - **Commit trailers, not git notes** (`Inventarium-Contract: <id>`) — trailers survive
 >   rebase and cherry-pick and push by default, which is exactly the mutation set this
 >   section exists to survive.
-> - **`post-merge` hook is an optimization only.** `agent-trail knowledge install-hook`
+> - **`post-merge` hook is an optimization only.** `inventarium knowledge install-hook`
 >   writes it; it refuses to clobber a hook it did not author, honours `core.hooksPath`,
 >   and every failure path exits 0 so it can never block a merge. Correctness stays
 >   pull-based — a fresh clone gets the same answer, just milliseconds later.
-> - **New CLI:** `agent-trail knowledge revalidate [--quiet]` rechecks every active
+> - **New CLI:** `inventarium knowledge revalidate [--quiet]` rechecks every active
 >   contract and reports valid / drifted / unverifiable.
 >
 > Fixed while verifying: a single-line function carried its whole BODY into the contract
@@ -436,12 +436,12 @@ The buy/build split makes this dramatically simpler, and this is the strongest a
 
 | | Code graph (derived) | Knowledge + edges (asserted) |
 |---|---|---|
-| Origin | external index, per machine | agent-trail's execution loop |
+| Origin | external index, per machine | inventarium's execution loop |
 | On loss | rebuild in minutes | **unrecoverable** |
 | Size | 100s of MB | ~1KB/event; 10k events ≈ 10MB |
 | Sync | **never — each machine builds its own** | append-only log + cursor |
 
-So the sync surface is the small, precious half. Nobody ships a GB index over the wire; each teammate's adapter builds locally, and agent-trail syncs kilobytes of decisions on top. That is a clean answer to *"shareable between multiple users and multiple agents on the same project."*
+So the sync surface is the small, precious half. Nobody ships a GB index over the wire; each teammate's adapter builds locally, and inventarium syncs kilobytes of decisions on top. That is a clean answer to *"shareable between multiple users and multiple agents on the same project."*
 
 - [x] `POST /v1/events` — append, dedupe on `content_hash`. Carries `knowledge_edges` in the same envelope.
 - [x] `GET /v1/events?since=<ulid>` — tail, returns next cursor.
@@ -472,7 +472,7 @@ Still explicitly **not** adopting ElectricSQL / PowerSync / Zero / LiveStore or 
 > isolation, malformed rows skipped without stalling a batch, and `sync:local-only`
 > checked *before any read of the log* so nothing can leak past a later bug.
 >
-> New: `agent-trail knowledge sync --remote <url>`.
+> New: `inventarium knowledge sync --remote <url>`.
 >
 > ### Relay identity — DONE 2026-08-08 (migration v29)
 >
@@ -491,10 +491,10 @@ Still explicitly **not** adopting ElectricSQL / PowerSync / Zero / LiveStore or 
 >   Both directions are pinned by tests.
 > - **Membership is re-checked per request**, and removing a member revokes their tokens
 >   for that workspace immediately rather than at next expiry.
-> - `AGENT_TRAIL_RELAY_TOKEN` survives as a single-workspace bootstrap secret, pinned to
->   `AGENT_TRAIL_RELAY_WORKSPACE` and granted `member` — never `admin`. A secret in an env
+> - `INVENTARIUM_RELAY_TOKEN` survives as a single-workspace bootstrap secret, pinned to
+>   `INVENTARIUM_RELAY_WORKSPACE` and granted `member` — never `admin`. A secret in an env
 >   var can carry data; it can never grant a stranger access.
-> - New: `agent-trail workspace create|ls|member add|member rm|token create|token ls|token revoke`,
+> - New: `inventarium workspace create|ls|member add|member rm|token create|token ls|token revoke`,
 >   and `GET /v1/workspace` / `POST|DELETE /v1/workspace/members`.
 >
 > **Found while building:** `parseToken` split on *every* underscore, but the secret half is
@@ -518,7 +518,7 @@ Still explicitly **not** adopting ElectricSQL / PowerSync / Zero / LiveStore or 
 
 ## 8. Measurement
 
-Replace the headline metric. §5.3 named discovery tool calls, and on agent-trail's own telemetry that number has nowhere to fall (Glob 20, Grep 1 across 38 executions). Keep it, but measure it on the unfamiliar repo only.
+Replace the headline metric. §5.3 named discovery tool calls, and on inventarium's own telemetry that number has nowhere to fall (Glob 20, Grep 1 across 38 executions). Keep it, but measure it on the unfamiliar repo only.
 
 The metric to own, because no tool in §0 reports it:
 
@@ -568,7 +568,7 @@ Roughly five weeks to the first real multiplayer moment, against three weeks of 
 
 **2. Licensing.** GitNexus is PolyForm Noncommercial and cannot ship inside an MIT product with a paid tier. Check every adapter's license against §5.1 before it becomes a default.
 
-**3. IDE-native absorption.** Anthropic still ships grep-only retrieval in Claude Code; if that changes, the entire external-index tier compresses. This plan is *more* robust to that than the original, not less: agent-trail would swap adapters and keep the asserted half, which is the part first-party tools have no way to capture.
+**3. IDE-native absorption.** Anthropic still ships grep-only retrieval in Claude Code; if that changes, the entire external-index tier compresses. This plan is *more* robust to that than the original, not less: inventarium would swap adapters and keep the asserted half, which is the part first-party tools have no way to capture.
 
 **4. The join is sparse.** If adapters resolve few symbols for real `likelyPaths`, edges degrade to `file:` granularity and Q2 loses most of its value. §3.3 measures this before you build on it, which is why coverage is a gate criterion and not an afterthought.
 

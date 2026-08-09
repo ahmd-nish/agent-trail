@@ -61,7 +61,7 @@ function buildPrompt(
   const reviewHint = defaults.defaultReviewKind ? `Default reviewKind: ${defaults.defaultReviewKind}` : "";
 
   // §4.3 — inject the team library so the planner can auto-match subagents
-  // per task. Names are stable slugs from .agent-trail/library/agents/*.md
+  // per task. Names are stable slugs from .inventarium/library/agents/*.md
   // (or the bundled agents). Descriptions are one-liners.
   const libraryBlock = library.length > 0
     ? `\n\nAvailable subagents in the team library — for each task, pick 0-2 whose\ndescriptions match the work. Reference by exact name in "subagents".\n${

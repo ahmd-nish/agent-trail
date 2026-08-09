@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Status:** Draft
-**Purpose:** End-to-end test PRD for agent-trail — exercises CRUD, search, and a many-to-many relationship under the TDD gate.
+**Purpose:** End-to-end test PRD for inventarium — exercises CRUD, search, and a many-to-many relationship under the TDD gate.
 
 ---
 
@@ -43,7 +43,7 @@ The goal is a small but non-trivial backend: enough variety (CRUD + relationship
 - **Storage:** SQLite (bun:sqlite) with foreign keys ON
 - **IDs:** UUID v4 strings
 - **Timestamps:** ISO-8601 UTC strings (`2026-05-22T13:14:15.123Z`)
-- **Port:** 3100 (do not collide with agent-trail's 3002)
+- **Port:** 3100 (do not collide with inventarium's 3002)
 - **Test framework:** bun:test
 
 ---

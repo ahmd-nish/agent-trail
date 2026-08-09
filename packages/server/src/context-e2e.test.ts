@@ -8,8 +8,8 @@ import { createServer } from "node:net";
 // PRD_OPEN_SOURCE §3 — team-context layer.
 // Covers:
 //   3.3 decision persistence — answering a ticket appends a durable entry to
-//       .agent-trail/context/decisions.md at the project root.
-//   3.4 constitution injection — CLAUDE.md + .agent-trail/context/*.md are
+//       .inventarium/context/decisions.md at the project root.
+//   3.4 constitution injection — CLAUDE.md + .inventarium/context/*.md are
 //       loaded per-execution and prepended to the system prompt.
 
 const SERVER_ENTRY = join(import.meta.dir, "index.ts");
@@ -99,15 +99,15 @@ describe("team-context E2E — PRD 3.3 decision persistence", () => {
     workDir = join(tmp, "work");
     mkdirSync(workDir, { recursive: true });
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_CLAUDE_MOCK: ASK_HUMAN_SCENARIO,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_CLAUDE_MOCK: ASK_HUMAN_SCENARIO,
       },
       stdio: "ignore",
     });
@@ -126,7 +126,7 @@ describe("team-context E2E — PRD 3.3 decision persistence", () => {
     if (tmp) rmSync(tmp, { recursive: true, force: true });
   });
 
-  test("answering a ticket appends a formatted block to .agent-trail/context/decisions.md", async () => {
+  test("answering a ticket appends a formatted block to .inventarium/context/decisions.md", async () => {
     // 1. Spawn a task, wait for it to block on the ask_human tool_use.
     const task = await (await fetch(`http://localhost:${port}/api/boards/${boardId}/tasks`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -148,7 +148,7 @@ describe("team-context E2E — PRD 3.3 decision persistence", () => {
 
     // 2. Confirm the decisions.md file does not exist yet — persistence should
     //    happen at answer time, not at ticket creation.
-    const decisionsPath = join(tmp, ".agent-trail", "context", "decisions.md");
+    const decisionsPath = join(tmp, ".inventarium", "context", "decisions.md");
     expect(existsSync(decisionsPath)).toBe(false);
 
     // 3. Answer the ticket.
@@ -194,7 +194,7 @@ describe("team-context E2E — PRD 3.3 decision persistence", () => {
       body: JSON.stringify({ answer: "answer number two" }),
     });
 
-    const decisionsPath = join(tmp, ".agent-trail", "context", "decisions.md");
+    const decisionsPath = join(tmp, ".inventarium", "context", "decisions.md");
     const text = readFileSync(decisionsPath, "utf8");
     const headings = text.match(/^# Decisions$/gm) ?? [];
     expect(headings.length).toBe(1);

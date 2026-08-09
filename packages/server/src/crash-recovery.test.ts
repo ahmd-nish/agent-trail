@@ -44,14 +44,14 @@ async function waitForHealth(port: number, ms = 15000): Promise<boolean> {
 
 async function launchServer(tmp: string): Promise<{ child: ChildProcess; port: number }> {
   const port = await findFreePort();
-  const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+  const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
   const child = spawn("bun", [SERVER_ENTRY], {
     cwd: tmp,
     env: {
       ...cleanEnv,
-      AGENT_TRAIL_PORT: String(port),
-      AGENT_TRAIL_ROOT: tmp,
-      AGENT_TRAIL_SKIP_RUNNER: "1",
+      INVENTARIUM_PORT: String(port),
+      INVENTARIUM_ROOT: tmp,
+      INVENTARIUM_SKIP_RUNNER: "1",
     },
     stdio: "ignore",
   });
@@ -80,7 +80,7 @@ describe("server startup crash recovery — PRD 1.10 (v1-bug-5)", () => {
 
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), "at-crash-e2e-"));
-    dbPath = join(tmp, "agent-trail.db");
+    dbPath = join(tmp, "inventarium.db");
 
     // Boot 1: let the server run migrations and create a board + task.
     const boot1 = await launchServer(tmp);

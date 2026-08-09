@@ -24,7 +24,7 @@ interface ProbeScenario {
 const scenarios: ProbeScenario[] = [
   {
     name: "simple-text",
-    prompt: "Reply with exactly: hello from agent-trail probe",
+    prompt: "Reply with exactly: hello from inventarium probe",
   },
   {
     name: "single-tool-call",
@@ -122,12 +122,12 @@ async function main() {
 
   await mkdir(outputDir, { recursive: true });
 
-  console.log(`\nagent-trail probe — ${timestamp}`);
+  console.log(`\ninventarium probe — ${timestamp}`);
   console.log(`Output dir: ${outputDir}\n`);
 
   const allRawLines: string[] = [];
   const report: string[] = [
-    `# agent-trail probe report`,
+    `# inventarium probe report`,
     ``,
     `Generated: ${new Date().toISOString()}`,
     ``,

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync, mkdirSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// PRD_OPEN_SOURCE 3.2 — `agent-trail context` CLI.
+// PRD_OPEN_SOURCE 3.2 — `inventarium context` CLI.
 // Shell out to the actual bin to catch argument-parsing regressions and
 // import-path breakage — the same failure modes users hit.
 
@@ -13,20 +13,20 @@ const CLI_ENTRY = join(import.meta.dir, "index.ts");
 function runCli(args: string[], cwd: string): { stdout: string; stderr: string; code: number } {
   const res = spawnSync("bun", [CLI_ENTRY, ...args], {
     cwd,
-    env: { ...process.env, AGENT_TRAIL_ROOT: cwd },
+    env: { ...process.env, INVENTARIUM_ROOT: cwd },
     encoding: "utf8",
   });
   return { stdout: res.stdout ?? "", stderr: res.stderr ?? "", code: res.status ?? -1 };
 }
 
-describe("agent-trail context — PRD 3.2 CLI", () => {
-  test("add appends a note to .agent-trail/context/notes.md", () => {
+describe("inventarium context — PRD 3.2 CLI", () => {
+  test("add appends a note to .inventarium/context/notes.md", () => {
     const tmp = mkdtempSync(join(tmpdir(), "at-cli-ctx-"));
     try {
       const { code, stdout } = runCli(["context", "add", "always use bun"], tmp);
       expect(code).toBe(0);
       expect(stdout).toContain("notes.md");
-      const notes = readFileSync(join(tmp, ".agent-trail", "context", "notes.md"), "utf8");
+      const notes = readFileSync(join(tmp, ".inventarium", "context", "notes.md"), "utf8");
       expect(notes).toContain("# Notes");
       expect(notes).toContain("always use bun");
     } finally {
@@ -39,7 +39,7 @@ describe("agent-trail context — PRD 3.2 CLI", () => {
     try {
       const { code } = runCli(["context", "add", "reviewer must be tagged", "--file", "conventions"], tmp);
       expect(code).toBe(0);
-      const path = join(tmp, ".agent-trail", "context", "conventions.md");
+      const path = join(tmp, ".inventarium", "context", "conventions.md");
       expect(existsSync(path)).toBe(true);
       expect(readFileSync(path, "utf8")).toContain("reviewer must be tagged");
     } finally {
@@ -66,9 +66,9 @@ describe("agent-trail context — PRD 3.2 CLI", () => {
       expect(empty.code).toBe(0);
       expect(empty.stdout).toContain("(empty)");
       // Now seed two files and re-list.
-      mkdirSync(join(tmp, ".agent-trail", "context"), { recursive: true });
-      writeFileSync(join(tmp, ".agent-trail", "context", "a.md"), "# alpha\n", "utf8");
-      writeFileSync(join(tmp, ".agent-trail", "context", "b.md"), "# beta\n", "utf8");
+      mkdirSync(join(tmp, ".inventarium", "context"), { recursive: true });
+      writeFileSync(join(tmp, ".inventarium", "context", "a.md"), "# alpha\n", "utf8");
+      writeFileSync(join(tmp, ".inventarium", "context", "b.md"), "# beta\n", "utf8");
       const { code, stdout } = runCli(["context", "ls"], tmp);
       expect(code).toBe(0);
       expect(stdout).toContain("a.md");

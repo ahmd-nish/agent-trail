@@ -67,7 +67,7 @@ describe("parseToolInput", () => {
   });
 
   test("mcp-namespaced ask_human matches by suffix", () => {
-    const p = parseToolInput("mcp__agent-trail__ask_human", JSON.stringify({ question: "Retry?" }));
+    const p = parseToolInput("mcp__inventarium__ask_human", JSON.stringify({ question: "Retry?" }));
     expect(p.verb).toBe("ask");
   });
 

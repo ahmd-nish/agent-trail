@@ -60,12 +60,12 @@ export interface SpawnOpts {
 export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionMode, timeoutMs, resumeSessionId, constitution, bands, callbacks }: SpawnOpts): ChildProcess | null {
   const promptFor = (t: typeof task): string =>
     bands ? buildBandedSystemPrompt(t, bands) : buildSystemPrompt(t, constitution);
-  // Test-only escape hatch: when AGENT_TRAIL_CLAUDE_MOCK is set to a JSON
+  // Test-only escape hatch: when INVENTARIUM_CLAUDE_MOCK is set to a JSON
   // scenario, skip spawning a real subprocess and drive the callbacks with
   // scripted events. Lets server-level E2E tests exercise the full pipeline
   // (routes → executionManager → adapter → SSE → telemetry) without a claude
   // CLI or an API key. Ignored in production because nothing sets the var.
-  const mock = process.env["AGENT_TRAIL_CLAUDE_MOCK"];
+  const mock = process.env["INVENTARIUM_CLAUDE_MOCK"];
   if (mock) {
     void worktreePath; void mcpConfigPath; void permissionMode; void timeoutMs;
     // Pre-compute the system prompt so the mock can optionally echo it — the
@@ -198,7 +198,7 @@ export function spawnClaudeCode({ task, worktreePath, mcpConfigPath, permissionM
 // the executionManager's synchronous slot-reservation completes before events
 // start arriving (mirrors the real adapter's async stdout stream).
 //
-// Scenario shape (`AGENT_TRAIL_CLAUDE_MOCK`):
+// Scenario shape (`INVENTARIUM_CLAUDE_MOCK`):
 //   {
 //     "events": [ { "type": "assistant" | "user", … StreamEvent … }, … ],
 //     "final":  "complete" | "error",
@@ -232,7 +232,7 @@ function runMockAdapter(task: Task, mock: string, callbacks: AdapterCallbacks, s
   try {
     scenario = JSON.parse(mock) as MockScenario;
   } catch (err) {
-    callbacks.onError(new Error(`AGENT_TRAIL_CLAUDE_MOCK parse error: ${err instanceof Error ? err.message : String(err)}`));
+    callbacks.onError(new Error(`INVENTARIUM_CLAUDE_MOCK parse error: ${err instanceof Error ? err.message : String(err)}`));
     return;
   }
 
@@ -322,13 +322,13 @@ interface AskHumanBlock {
 }
 
 // Insert a decision_tickets row using the same DB the server opened. The
-// AGENT_TRAIL_DB_PATH env is set by the plumbing in db.ts's resolveDbPath —
-// falls back to <project root>/agent-trail.db which our test drivers already
-// point at their tmp dir via AGENT_TRAIL_ROOT + CWD.
+// INVENTARIUM_DB_PATH env is set by the plumbing in db.ts's resolveDbPath —
+// falls back to <project root>/inventarium.db which our test drivers already
+// point at their tmp dir via INVENTARIUM_ROOT + CWD.
 function insertMockDecisionTicket(taskId: string, block: AskHumanBlock): void {
   const dbPath =
+    process.env["INVENTARIUM_DB_PATH"] ??
     process.env["AGENT_TRAIL_DB_PATH"] ??
-    process.env["VIBE_BOARD_DB_PATH"] ??
     resolveMockDbPath();
   if (!dbPath) return;
   try {
@@ -361,7 +361,7 @@ function insertMockDecisionTicket(taskId: string, block: AskHumanBlock): void {
 }
 
 function resolveMockDbPath(): string {
-  return `${process.env["AGENT_TRAIL_ROOT"] ?? process.cwd()}/agent-trail.db`;
+  return `${process.env["INVENTARIUM_ROOT"] ?? process.cwd()}/inventarium.db`;
 }
 
 // Register with the shared adapter registry so `Task.assignee = "claude-code"`

@@ -4,7 +4,7 @@
 // of claude-code.ts: spawn the CLI, translate its stream into StreamEvents,
 // call the shared callbacks. Fill in TODO markers to ship a real adapter.
 //
-// The mock path (via AGENT_TRAIL_CLAUDE_MOCK equivalent) is intentionally
+// The mock path (via INVENTARIUM_CLAUDE_MOCK equivalent) is intentionally
 // omitted here — copy that pattern from claude-code.ts when you need
 // server-level E2E without hitting the real CLI.
 

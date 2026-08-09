@@ -69,7 +69,7 @@ export function diffTasksToEvents(state: DiffState, tasks: readonly Task[]): Dif
   return events;
 }
 
-const TONE_KEY = "agent-trail:scout-tone";
+const TONE_KEY = "inventarium:scout-tone";
 const QUIP_TTL_MS = 6500;  // how long a picked line stays on screen
 
 export interface ScoutQuipsState {

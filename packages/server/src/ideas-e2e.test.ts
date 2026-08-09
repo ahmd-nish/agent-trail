@@ -11,7 +11,7 @@ import { createServer } from "node:net";
 //   1. Questions mode — returns a fixture JSON with the four required
 //      dimensions the parseAndRepairQuestions function expects.
 //   2. PRD mode — returns a valid markdown PRD.
-// The mock reads AGENT_TRAIL_IDEA_MOCK unconditionally, so we boot the server
+// The mock reads INVENTARIUM_IDEA_MOCK unconditionally, so we boot the server
 // twice — once per mode. This is simpler than teaching the mock to switch
 // based on prompt content and stays faithful to the "prompt-in text-out"
 // contract.
@@ -126,18 +126,18 @@ interface IdeaResp {
 
 async function bootServer(mock: string): Promise<{ child: ChildProcess; port: number; tmp: string }> {
   const tmp = mkdtempSync(join(tmpdir(), "at-ideas-e2e-"));
-  mkdirSync(join(tmp, ".agent-trail"), { recursive: true });
+  mkdirSync(join(tmp, ".inventarium"), { recursive: true });
   const port = await findFreePort();
-  const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+  const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
   const child = spawn("bun", [SERVER_ENTRY], {
     cwd: tmp,
     env: {
       ...cleanEnv,
-      AGENT_TRAIL_PORT: String(port),
-      AGENT_TRAIL_ROOT: tmp,
-      AGENT_TRAIL_SKIP_RUNNER: "1",
-      AGENT_TRAIL_SKIP_AUTOSYNC: "1",
-      AGENT_TRAIL_IDEA_MOCK: mock,
+      INVENTARIUM_PORT: String(port),
+      INVENTARIUM_ROOT: tmp,
+      INVENTARIUM_SKIP_RUNNER: "1",
+      INVENTARIUM_SKIP_AUTOSYNC: "1",
+      INVENTARIUM_IDEA_MOCK: mock,
     },
     stdio: "ignore",
   });
@@ -263,7 +263,7 @@ describe("ideas wizard — synthesize + link-board", () => {
   afterAll(async () => { await killServer(child, tmp); });
 
   test("full happy path: start → answer 4 → synthesize → link-board", async () => {
-    // NB: /start also uses AGENT_TRAIL_IDEA_MOCK, so the "questions" the mock
+    // NB: /start also uses INVENTARIUM_IDEA_MOCK, so the "questions" the mock
     // returns here are actually PRD_MOCK — the parser rejects that. Because
     // this test suite is scoped to synthesis, we bypass /start and seed
     // the row directly via SQL through a smaller round-trip: create the
@@ -292,7 +292,7 @@ describe("ideas wizard — synthesize + link-board", () => {
 });
 
 // ─── Test group 3: full happy path via a switchable mock ───────────────────────
-// We solve the dual-mock problem by pointing AGENT_TRAIL_IDEA_MOCK at a
+// We solve the dual-mock problem by pointing INVENTARIUM_IDEA_MOCK at a
 // tiny helper file that the runner reads with `file:<path>` — but the runner
 // itself is stateless: it returns the SAME contents on every call. So instead
 // we boot with the questions mock, then patch the mock file mid-test to
@@ -307,22 +307,22 @@ describe("ideas wizard — full happy path (mock swap via file)", () => {
 
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), "at-ideas-e2e-full-"));
-    mkdirSync(join(tmp, ".agent-trail"), { recursive: true });
+    mkdirSync(join(tmp, ".inventarium"), { recursive: true });
     mockPath = join(tmp, "mock.txt");
     // Start with the questions JSON.
     await Bun.write(mockPath, QUESTIONS_MOCK);
 
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_SKIP_AUTOSYNC: "1",
-        AGENT_TRAIL_IDEA_MOCK: `file:${mockPath}`,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_SKIP_AUTOSYNC: "1",
+        INVENTARIUM_IDEA_MOCK: `file:${mockPath}`,
       },
       stdio: "ignore",
     });

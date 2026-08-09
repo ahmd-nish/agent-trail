@@ -16,7 +16,7 @@ function freshDb() {
 
 function seedContext(files: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), "at-backfill-"));
-  const dir = join(root, ".agent-trail", "context");
+  const dir = join(root, ".inventarium", "context");
   mkdirSync(dir, { recursive: true });
   for (const [name, contents] of Object.entries(files)) {
     writeFileSync(join(dir, name), contents, "utf8");

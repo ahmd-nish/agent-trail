@@ -1,7 +1,7 @@
 import confetti from "canvas-confetti";
 
-const STORAGE_KEY = "agent-trail.lastConfettiDate";
-const MILESTONE_KEY = "agent-trail.completionCount";
+const STORAGE_KEY = "inventarium.lastConfettiDate";
+const MILESTONE_KEY = "inventarium.completionCount";
 const MILESTONES = [5, 10, 25, 50, 100];
 
 const prefersReducedMotion =

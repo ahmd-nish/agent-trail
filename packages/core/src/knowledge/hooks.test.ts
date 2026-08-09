@@ -17,7 +17,7 @@ describe("post-merge hook (§4.2e — optimization only)", () => {
     const res = installPostMergeHook(root);
     expect(res.installed).toBe(true);
     const body = readFileSync(res.path!, "utf8");
-    expect(body).toContain("agent-trail:post-merge");
+    expect(body).toContain("inventarium:post-merge");
     // Must never block a merge — every failure path exits 0.
     expect(body).toContain("exit 0");
     expect(body).toContain("|| true");
@@ -33,7 +33,7 @@ describe("post-merge hook (§4.2e — optimization only)", () => {
 
     const res = installPostMergeHook(root);
     expect(res.installed).toBe(false);
-    expect(res.reason).toContain("not written by agent-trail");
+    expect(res.reason).toContain("not written by inventarium");
     expect(readFileSync(path, "utf8")).toContain("echo mine");
     rmSync(root, { recursive: true, force: true });
   });
@@ -43,7 +43,7 @@ describe("post-merge hook (§4.2e — optimization only)", () => {
     writeFileSync(join(hooksDir(root)!, "post-merge"), "#!/bin/sh\necho mine\n", "utf8");
     const res = installPostMergeHook(root, { force: true });
     expect(res.installed).toBe(true);
-    expect(readFileSync(res.path!, "utf8")).toContain("agent-trail:post-merge");
+    expect(readFileSync(res.path!, "utf8")).toContain("inventarium:post-merge");
     rmSync(root, { recursive: true, force: true });
   });
 

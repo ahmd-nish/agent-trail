@@ -14,9 +14,9 @@
   What I didn't fix and you should know about                                                                               
                   
   1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
-   server name (vibe-board), ~/vibe-board-runs/, env var VIBE_BOARD_DB_PATH, package names (@vibe-board/*), and console logs
+   server name (vibe-board), ~/vibe-board-runs/, env var AGENT_TRAIL_DB_PATH, package names (@vibe-board/*), and console logs
    all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called  
-  agent-trail. Pick a name, run a sed pass.                                          
+  inventarium. Pick a name, run a sed pass.                                          
   2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
   user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.                
   3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
@@ -24,9 +24,9 @@
   mechanical ?? null or | undefined additions.                                       
 
   1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
-   server name (vibe-board), ~/vibe-board-runs/, env var VIBE_BOARD_DB_PATH, package names (@vibe-board/*), and console logs
+   server name (vibe-board), ~/vibe-board-runs/, env var AGENT_TRAIL_DB_PATH, package names (@vibe-board/*), and console logs
    all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called
-  agent-trail. Pick a name, run a sed pass.
+  inventarium. Pick a name, run a sed pass.
   2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
   user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.
   3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
@@ -44,7 +44,7 @@
   part that does real work — which is the difference between "looks cool" and "I trust this enough to use it on Saturday."
   The remaining gaps are scope and polish, not architecture.
    all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called
-  agent-trail. Pick a name, run a sed pass.
+  inventarium. Pick a name, run a sed pass.
   2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
   user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.
   3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests
@@ -64,9 +64,9 @@
   1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
 
   1. The rename is still half-finished. I centralized the DB filename behind one constant (DB_FILENAME), but the README, MCP
-   server name (vibe-board), ~/vibe-board-runs/, env var VIBE_BOARD_DB_PATH, package names (@vibe-board/*), and console logs
+   server name (vibe-board), ~/vibe-board-runs/, env var AGENT_TRAIL_DB_PATH, package names (@vibe-board/*), and console logs
    all still say vibe-board. Anybody who installs from this repo today gets a tool called vibe-board in a directory called
-  agent-trail. Pick a name, run a sed pass.
+  inventarium. Pick a name, run a sed pass.
   2. No execution timeout. I described it in the plan but didn't implement it. If claude hangs (not crashes — hangs), the
   user has to hit Stop manually. Should be a setTimeout in the spawn path with a board-configurable default.
   3. 138 pre-existing TS strict-mode errors across UI files (exactOptionalPropertyTypes, noUncheckedIndexedAccess). Tests

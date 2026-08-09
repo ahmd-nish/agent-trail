@@ -146,7 +146,7 @@ testExecutionRouter.patch("/tests/:taskId/cases/:caseId", async (c) => {
 });
 
 // PRD_TESTING T3.2 — on-demand agent case-authoring.
-// Dispatches to the claude CLI adapter (mockable via AGENT_TRAIL_CASE_GEN_MOCK)
+// Dispatches to the claude CLI adapter (mockable via INVENTARIUM_CASE_GEN_MOCK)
 // with the task's criteria + any board-scoped `case_examples` for T3.4
 // round-trip learning. Returns the generated cases WITHOUT persisting them —
 // the caller decides which to keep (they'll usually POST them back via

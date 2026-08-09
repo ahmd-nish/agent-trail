@@ -11,9 +11,9 @@ import { Database } from "bun:sqlite";
 // adapter so no real `claude` CLI runs. We also stub the worktree manager
 // (avoid `git worktree add`) and post-execution hook (avoid `git diff`).
 
-const tmp = mkdtempSync(join(tmpdir(), "agent-trail-test-"));
+const tmp = mkdtempSync(join(tmpdir(), "inventarium-test-"));
 const dbPath = join(tmp, "test.db");
-process.env["AGENT_TRAIL_DB_PATH"] = dbPath;
+process.env["INVENTARIUM_DB_PATH"] = dbPath;
 
 // Controllable fake child for stop() tests.
 interface FakeChild extends EventEmitter {

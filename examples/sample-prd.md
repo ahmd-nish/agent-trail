@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Status:** Draft  
-**Purpose:** Dogfood PRD for agent-trail Day 7 end-to-end test
+**Purpose:** Dogfood PRD for inventarium Day 7 end-to-end test
 
 ---
 

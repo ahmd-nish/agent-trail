@@ -1,4 +1,4 @@
--- agent-trail v0.1.1 baseline schema.
+-- inventarium v0.1.1 baseline schema.
 --
 -- This file represents the CURRENT shape of the database. A fresh install
 -- runs this once; existing databases skip it (see packages/server/src/db.ts).

@@ -1,14 +1,14 @@
 {
-  "name": "@agent-trail/server",
+  "name": "@inventarium/server",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Hono API + execution manager + SSE bus for agent-trail.",
+  "description": "Hono API + execution manager + SSE bus for inventarium.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "url": "https://github.com/ahmd-nish/inventarium.git",
     "directory": "packages/server"
   },
-  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
+  "homepage": "https://github.com/ahmd-nish/inventarium#readme",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -26,7 +26,7 @@
     "dev": "bun --hot src/index.ts"
   },
   "dependencies": {
-    "@agent-trail/core": "workspace:*",
+    "@inventarium/core": "workspace:*",
     "hono": "^4.12.21"
   }
 }

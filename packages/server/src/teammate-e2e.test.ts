@@ -6,8 +6,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 
 // PRD_OPEN_SOURCE §3.5 — teammate flow.
-// A collaborator clones a repo that contains `.agent-trail/state.json` (and
-// optionally `.agent-trail/context/*.md`). Running the server should hydrate
+// A collaborator clones a repo that contains `.inventarium/state.json` (and
+// optionally `.inventarium/context/*.md`). Running the server should hydrate
 // the DB from the state file with no additional setup — same board, same
 // tasks, same context.
 
@@ -45,7 +45,7 @@ const SEEDED_STATE = {
       id: "t-clone-1",
       board_id: "b-teammate",
       title: "Hello from the repo",
-      description: "This task was in .agent-trail/state.json when the repo was cloned.",
+      description: "This task was in .inventarium/state.json when the repo was cloned.",
       status: "backlog",
       priority: "medium",
       assignee: "claude-code",
@@ -149,32 +149,32 @@ describe("teammate flow E2E — PRD 3.5", () => {
   let tmp = "";
 
   beforeAll(async () => {
-    // Simulate: a teammate just cloned a repo that contains .agent-trail/state.json.
+    // Simulate: a teammate just cloned a repo that contains .inventarium/state.json.
     tmp = mkdtempSync(join(tmpdir(), "at-teammate-e2e-"));
-    mkdirSync(join(tmp, ".agent-trail", "context"), { recursive: true });
+    mkdirSync(join(tmp, ".inventarium", "context"), { recursive: true });
     writeFileSync(
-      join(tmp, ".agent-trail", "state.json"),
+      join(tmp, ".inventarium", "state.json"),
       JSON.stringify(SEEDED_STATE, null, 2),
       "utf8",
     );
     // Also drop a context file so hydration + constitution both fire on first boot.
     writeFileSync(
-      join(tmp, ".agent-trail", "context", "conventions.md"),
+      join(tmp, ".inventarium", "context", "conventions.md"),
       "TEAM RULE: reviewer must be tagged.",
       "utf8",
     );
 
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
         // Keep autosync off — this test only cares about hydration on boot.
-        AGENT_TRAIL_SKIP_AUTOSYNC: "1",
+        INVENTARIUM_SKIP_AUTOSYNC: "1",
       },
       stdio: "ignore",
     });

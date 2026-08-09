@@ -10,16 +10,16 @@ import { search as searchKnowledge } from "../knowledge/search.ts";
 import { buildRiskIndex, formatRiskWarnings } from "../knowledge/risk.ts";
 import type { EventType, Scope } from "../knowledge/types.ts";
 
-const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
+const DB_PATH = process.env["INVENTARIUM_DB_PATH"] ?? process.env["AGENT_TRAIL_DB_PATH"];
 if (!DB_PATH) {
-  process.stderr.write("board-server MCP: missing AGENT_TRAIL_DB_PATH env var\n");
+  process.stderr.write("board-server MCP: missing INVENTARIUM_DB_PATH env var\n");
   process.exit(1);
 }
 
 const db = new Database(DB_PATH);
 
 const server = new Server(
-  { name: "agent-trail", version: "1.0.0" },
+  { name: "inventarium", version: "1.0.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -27,7 +27,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "list_tasks",
-      description: "List tasks on the agent-trail board, optionally filtered by boardId or status.",
+      description: "List tasks on the inventarium board, optionally filtered by boardId or status.",
       inputSchema: {
         type: "object",
         properties: {

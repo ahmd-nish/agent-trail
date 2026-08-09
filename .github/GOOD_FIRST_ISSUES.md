@@ -17,7 +17,7 @@ Add `packages/cli/agents/docs-writer.md` — an agent tuned for writing README s
 ## 5. Add a `--version` flag to the CLI
 `packages/cli/src/index.ts` doesn't print the version yet. Read it from `packages/cli/package.json` and print on `--version` / `-v`. Add to the help text.
 
-## 6. Colorize the `agent-trail status` output by column count
+## 6. Colorize the `inventarium status` output by column count
 `cmdStatus` in `packages/cli/src/index.ts` prints status counts. If `in_progress > 0`, green the number; if `blocked > 0`, red. Uses the existing `c.*` ANSI helpers.
 
 ## 7. Add an example PRD for a Slack bot
@@ -29,7 +29,7 @@ The board's "run all" button is at the top of `packages/web/src/App.tsx`. Bind i
 ## 9. Add a "copy diff" button to the artifact display
 When a task has a `git_diff` artifact, the task detail shows the content. Add a "copy" button that puts the diff on the clipboard. See `packages/web/src/components/task-detail/` for the current artifact view.
 
-## 10. Add a `agent-trail export <boardId>` CLI subcommand
+## 10. Add a `inventarium export <boardId>` CLI subcommand
 The server has `/api/boards/:id/export`. Wire a CLI subcommand that writes the JSON to stdout so users can pipe boards into other tools. Follow the `cmdStatus` / `cmdPlan` shape in the CLI.
 
 ---

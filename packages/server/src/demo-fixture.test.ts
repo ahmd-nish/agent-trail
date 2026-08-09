@@ -45,18 +45,18 @@ describe("demo fixture (PRD 1.12)", () => {
 
   beforeAll(async () => {
     if (!(await Bun.file(FIXTURE_PATH).exists())) {
-      throw new Error(`Demo fixture missing at ${FIXTURE_PATH}. Run: bun run -F @agent-trail/web build`);
+      throw new Error(`Demo fixture missing at ${FIXTURE_PATH}. Run: bun run -F @inventarium/web build`);
     }
     tmp = mkdtempSync(join(tmpdir(), "at-demo-e2e-"));
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
       },
       stdio: "ignore",
     });

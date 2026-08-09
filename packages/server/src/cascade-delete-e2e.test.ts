@@ -51,14 +51,14 @@ describe("test_case_runs cascade-delete on task delete — T0.6", () => {
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), "at-cascade-t0-"));
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
       },
       stdio: "ignore",
     });
@@ -86,7 +86,7 @@ describe("test_case_runs cascade-delete on task delete — T0.6", () => {
 
     // Seed a run row for a hypothetical case id. The row is real and its
     // task_id column carries the FK.
-    const dbPath = join(tmp, "agent-trail.db");
+    const dbPath = join(tmp, "inventarium.db");
     const db = new Database(dbPath);
     db.exec("PRAGMA foreign_keys = ON");
     const caseId = `case-${crypto.randomUUID()}`;

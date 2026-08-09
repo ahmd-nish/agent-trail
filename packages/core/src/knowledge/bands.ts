@@ -1,7 +1,7 @@
 // knowledgelayer §4.4 — the three-band prompt (four, counting governance).
 //
 // ┌─ BAND A — org prefix ────────── changes ~weekly ── stable across PROJECTS
-// │  agent-trail operating instructions · org-scope rulings
+// │  inventarium operating instructions · org-scope rulings
 // ├─ BAND B — project prefix ────── changes ~daily ─── stable across TASKS
 // │  project constitution · PROJECT_MAP · module brief for the task's dir
 // ├─ BAND C — task pack ─────────── per spawn ──────── varies every time
@@ -11,7 +11,7 @@
 //
 // ── What this can and cannot do, honestly ───────────────────────────────────
 //
-// agent-trail hands its prompt to the `claude` CLI via --append-system-prompt.
+// inventarium hands its prompt to the `claude` CLI via --append-system-prompt.
 // It therefore CANNOT emit `cache_control` breakpoints itself — the CLI owns
 // those. What it can control is the thing that makes any prefix cache possible
 // in the first place: putting all STABLE content before all VARYING content,

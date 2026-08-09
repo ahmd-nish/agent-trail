@@ -1,4 +1,4 @@
-# agent-trail — Shared Knowledge Layer
+# inventarium — Shared Knowledge Layer
 
 **Date:** 2026-07-28 · **Owner:** Nish · **Mode:** full-time solo, relay-first, 1–2 dogfood partners
 
@@ -8,7 +8,7 @@
 
 ## 0. The one-sentence thesis
 
-> **Every other team-memory product asks people to write down what they know. agent-trail already watches them do the work — so the knowledge writes itself, and every teammate's agent inherits it.**
+> **Every other team-memory product asks people to write down what they know. inventarium already watches them do the work — so the knowledge writes itself, and every teammate's agent inherits it.**
 
 That is the whole moat. Read §2 before anything else.
 
@@ -24,7 +24,7 @@ YC's Fall 2026 RFS "Multiplayer AI" (by Aaron Epstein) reads like a spec for wha
 
 Map that onto what exists in your repo today:
 
-| YC's words | agent-trail today | Gap |
+| YC's words | inventarium today | Gap |
 |---|---|---|
 | "drop into the same live agent session" | SSE feed per task | Single-machine only |
 | "watch it work" | cinematic activity feed | ✅ done |
@@ -68,7 +68,7 @@ Those three numbers are your entire token story, and §5 turns them into archite
 
 Every knowledge product in history dies on the same rock: **nobody writes the docs.** Byterover, BuildBetter CLI, projectmem, AGENTS.md, Cursor rules — all of them require a human to stop working and author a memory, or a git hook to guess intent from a commit message.
 
-agent-trail is structurally different. Its execution loop *already* generates exactly the five event types a knowledge layer needs, as a byproduct of running:
+inventarium is structurally different. Its execution loop *already* generates exactly the five event types a knowledge layer needs, as a byproduct of running:
 
 | Knowledge event | Where it already comes from in your code |
 |---|---|
@@ -82,7 +82,7 @@ Nobody types anything. The human answers a question they were going to answer an
 
 **Positioning line:**
 
-> *"Byterover gives your team a shared notebook. agent-trail gives your team a shared brain that fills itself — because it's watching the work."*
+> *"Byterover gives your team a shared notebook. inventarium gives your team a shared brain that fills itself — because it's watching the work."*
 
 Say it in the README, the Show HN comment, and the YC application.
 
@@ -94,7 +94,7 @@ Read `packages/core/src/context/store.ts` and `memory.ts` with fresh eyes. Four 
 
 **3.1 The L0 constitution is a dump, not a retrieval — and it silently loses data.**
 
-`loadConstitution()` concatenates `CLAUDE.md` + every `.agent-trail/context/*.md`, **sorted alphabetically**, hard-capped at 8,000 chars. On a solo project that's fine. On a team, `decisions.md` grows every time anyone answers a ticket. The day it crosses the cap, rulings start silently dropping out of every agent's prompt — and *which* ones drop is determined by filename sort order, not relevance or recency.
+`loadConstitution()` concatenates `CLAUDE.md` + every `.inventarium/context/*.md`, **sorted alphabetically**, hard-capped at 8,000 chars. On a solo project that's fine. On a team, `decisions.md` grows every time anyone answers a ticket. The day it crosses the cap, rulings start silently dropping out of every agent's prompt — and *which* ones drop is determined by filename sort order, not relevance or recency.
 
 This is a correctness bug at team scale, not a performance issue. It is the single most important thing to fix.
 
@@ -260,11 +260,11 @@ Use `web-tree-sitter` (WASM, no native build, works under Bun). Deterministic pa
 
 ### 4.2e Git as the validity oracle — derive staleness, never record it
 
-**Do not build "AI-native" as an assumption that every write flows through agent-trail.** That assumption is false even on a team that is all-in, and every system that has claimed exclusive write access to a repo has been wrong. The mutations you will not originate:
+**Do not build "AI-native" as an assumption that every write flows through inventarium.** That assumption is false even on a team that is all-in, and every system that has claimed exclusive write access to a repo has been wrong. The mutations you will not originate:
 
 `git revert` of an agent commit · merge-conflict resolution · rebases and cherry-picks · dependabot/renovate bumps · generated code (types, migrations, lockfiles) · a teammate using Cursor or IDE Copilot · a one-character hotfix at 2am
 
-The gap isn't "humans typing." It's **any mutation agent-trail didn't author** — and there will always be some.
+The gap isn't "humans typing." It's **any mutation inventarium didn't author** — and there will always be some.
 
 #### The fix: contracts are anchored to a commit, and validity is a query
 
@@ -305,7 +305,7 @@ So a hand-edited file produces a re-derived contract automatically. You lose int
 
 `git log` / `git blame` on the changed hunks gives you author, message, and timestamp. A hand edit still becomes a knowledge event — tagged `source: 'git'`, `confidence: 'observed'` instead of `'ruling'`. Knowledge isn't lost; only the *why* is, and the `governs` edges from prior decisions still apply to the file.
 
-Use **commit trailers**, not `git notes`, for the reverse link (`Agent-Trail-Contract: <id>`). Trailers survive rebase, cherry-pick, and every host; notes live in `refs/notes/*`, don't push by default, and get silently dropped.
+Use **commit trailers**, not `git notes`, for the reverse link (`Inventarium-Contract: <id>`). Trailers survive rebase, cherry-pick, and every host; notes live in `refs/notes/*`, don't push by default, and get silently dropped.
 
 #### The disaster-recovery property this buys you
 
@@ -324,7 +324,7 @@ Which lands exactly on §4.2d's split: **git is the perfect oracle for the code 
 
 #### The business reason to degrade gracefully
 
-Requiring exclusive write access is an adoption blocker. A team evaluating you cannot route 100% of changes through agent-trail on day one — nobody adopts that way. If the layer stays correct when half the commits come from outside it, teams can adopt incrementally, which is the only way tools actually get adopted. **Graceful degradation is a growth feature, not just an engineering nicety.**
+Requiring exclusive write access is an adoption blocker. A team evaluating you cannot route 100% of changes through inventarium on day one — nobody adopts that way. If the layer stays correct when half the commits come from outside it, teams can adopt incrementally, which is the only way tools actually get adopted. **Graceful degradation is a growth feature, not just an engineering nicety.**
 
 ### 4.2c Symbol index — ambient repo shape
 
@@ -440,7 +440,7 @@ This is the highest-leverage change in the entire plan and it is mostly a *reord
 
 ```
 ┌─ BAND A — org prefix ────────────── changes ~weekly ── CACHE BREAKPOINT (1h TTL)
-│  tool definitions · agent-trail system instructions · org-scope rulings
+│  tool definitions · inventarium system instructions · org-scope rulings
 ├─ BAND B — project prefix ────────── changes ~daily ─── CACHE BREAKPOINT (1h TTL)
 │  project constitution (active rulings) · PROJECT_MAP · module brief for the task's dir
 ├─ BAND C — task pack ─────────────── per spawn ─────── NOT CACHED
@@ -528,7 +528,7 @@ Mitigations, all shippable:
 
 - **Secret redaction on the write path, default on.** Copy projectmem's approach: anchored patterns for `sk-`, GitHub tokens, `AKIA`, `AIza`, Slack/Stripe tokens, JWTs, PEM headers. Redact before anything touches disk *or* the wire. Pin it with true-positive AND false-positive tests so ordinary debugging prose is never mangled.
 - **Per-project `sync: local-only`** flag — knowledge stays on the machine, board still syncs.
-- **`agent-trail knowledge export`** → plain JSONL + regenerated markdown. Your data, always ejectable. This is also your git-tier fallback if the relay thesis fails.
+- **`inventarium knowledge export`** → plain JSONL + regenerated markdown. Your data, always ejectable. This is also your git-tier fallback if the relay thesis fails.
 - **Self-host** the relay (it's ~500 lines and a Postgres URL).
 
 Publish all four before you take a dollar.
@@ -539,7 +539,7 @@ The projectmem paper states plainly that its own token figures are "usage estima
 
 **Build it. Ship it. Name it.**
 
-`agent-trail bench` over a seeded corpus, reporting:
+`inventarium bench` over a seeded corpus, reporting:
 
 | Metric | Definition |
 |---|---|
@@ -573,21 +573,21 @@ Each phase ends in something demoable. If a phase slips, cut scope inside it; do
 
 Not housekeeping. You cannot recruit design partners for a multiplayer dev tool from a repo with 0 stars, no npm package, and a README that says `git clone` when the product does `npx`.
 
-- [ ] README rewritten to match reality: `npx agent-trail --demo` above the fold, current feature set, current roadmap
+- [ ] README rewritten to match reality: `npx inventarium --demo` above the fold, current feature set, current roadmap
 - [ ] `npm publish` — the P0 your own release plan named and skipped
 - [ ] GitHub Release for v1.0.0, repo description, topics
 - [ ] File the 10 drafted good-first-issues from `.github/GOOD_FIRST_ISSUES.md`
 - [ ] Clean-machine E2E on the Phase 3/4/5 code (never done)
 - [ ] Archive the 10 stale internal docs
 
-**Gate: do not start Week 1 until `npx agent-trail` works on a machine that is not yours.**
+**Gate: do not start Week 1 until `npx inventarium` works on a machine that is not yours.**
 
 ### Weeks 1–2 — Substrate + minimal relay
 
 - [ ] `knowledge_events` schema (§4.1) in Postgres + mirrored SQLite; Drizzle migrations
 - [ ] `packages/core/src/knowledge/` — `append()`, `fold()`, `project()`, ULID, content-hash dedupe, secret redaction
 - [ ] Emit events from all five existing sources (§2) — no new UI required
-- [ ] Backfill: your 130 existing memories in `.agent-trail/context/memories/` + `decisions.md` + git history
+- [ ] Backfill: your 130 existing memories in `.inventarium/context/memories/` + `decisions.md` + git history
 - [ ] Deterministic projections replace `loadConstitution()` — fixes §3.1 and §3.2
 - [ ] **Capability contracts (§4.2b)** — tree-sitter extraction + Haiku intent pass; replaces `buildHeuristicMemory()` as the dependency payload
 - [ ] **Symbol index + code graph (§4.2c, §4.2d)** — tree-sitter → `graph_nodes` / `graph_edges` in Postgres; initial build + incremental update on execution diff; recursive-CTE traversal with cycle guard
@@ -634,13 +634,13 @@ Not housekeeping. You cannot recruit design partners for a multiplayer dev tool 
 
 - [ ] Secret-redaction test suite (true + false positives)
 - [ ] `sync: local-only` per project
-- [ ] `agent-trail knowledge export` → JSONL + markdown + `AGENTS.md` projection
+- [ ] `inventarium knowledge export` → JSONL + markdown + `AGENTS.md` projection
 - [ ] Self-host docs for the relay
 - [ ] Fix `state.json` LWW (§4.6)
 
 ### Weeks 9–10 — Benchmark + design partners
 
-- [ ] `agent-trail bench` harness + seeded corpus (§5.3)
+- [ ] `inventarium bench` harness + seeded corpus (§5.3)
 - [ ] Publish the harness and your numbers
 - [ ] Onboard your 1–2 people properly; then recruit 3 more small teams from your issue tracker, the Claude Code Discord, and r/ClaudeAI
 - [ ] Stripe seat billing, 14-day trial
@@ -649,7 +649,7 @@ Not housekeeping. You cannot recruit design partners for a multiplayer dev tool 
 
 ### Weeks 11–12 — Launch
 
-- [ ] Show HN, Tue–Thu 8–10am ET. Title: *"Show HN: agent-trail – Multiplayer AI coding agents with a shared team memory"*. First comment ready: the YC RFS framing, the benchmark numbers, the projectmem future-work alignment
+- [ ] Show HN, Tue–Thu 8–10am ET. Title: *"Show HN: inventarium – Multiplayer AI coding agents with a shared team memory"*. First comment ready: the YC RFS framing, the benchmark numbers, the projectmem future-work alignment
 - [ ] Blog: "We built the first benchmark for team context layers"
 - [ ] Blog: "Your team's agents should share a brain — here's the architecture"
 - [ ] Product Hunt the following week
@@ -678,7 +678,7 @@ Precedent: 11 plan docs, ~38k LOC, v1.0.0 tagged July 5, launch scheduled July 7
 
 > Your team runs Claude Code all day. Every decision, every dead end, every convention lives in someone's private terminal session and dies there. New agent, new session, same questions.
 >
-> agent-trail is a kanban board where your agents do the work in the open. Anyone on the team can drop into a running agent session, watch it, redirect it, answer its questions, hand it off.
+> inventarium is a kanban board where your agents do the work in the open. Anyone on the team can drop into a running agent session, watch it, redirect it, answer its questions, hand it off.
 >
 > And because every one of those interactions is captured, your team's knowledge writes itself. The next agent — anyone's agent — inherits it. It won't repeat the fix that failed for your teammate on Tuesday.
 >

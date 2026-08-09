@@ -25,7 +25,7 @@ export interface ThemeDef {
   render: ComponentType<ThemeRendererProps>;
 }
 
-const STORAGE_KEY = "agent-trail:feed-theme";
+const STORAGE_KEY = "inventarium:feed-theme";
 
 export function loadPersistedTheme(): ThemeId {
   try {

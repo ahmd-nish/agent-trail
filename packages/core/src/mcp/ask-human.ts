@@ -2,8 +2,8 @@
 /**
  * ask_human MCP server.
  * Spawned per-task via --mcp-config injection.
- * Required env: AGENT_TRAIL_DB_PATH, AGENT_TRAIL_TASK_ID, AGENT_TRAIL_EXECUTION_ID
- *   (or the deprecated VIBE_BOARD_* equivalents for one release)
+ * Required env: INVENTARIUM_DB_PATH, INVENTARIUM_TASK_ID, INVENTARIUM_EXECUTION_ID
+ *   (or the deprecated AGENT_TRAIL_* equivalents for one release)
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -15,14 +15,14 @@ import {
 import { Database } from "bun:sqlite";
 import { readTaskMemory, listTaskMemories } from "../context/memory.ts";
 
-const DB_PATH = process.env["AGENT_TRAIL_DB_PATH"] ?? process.env["VIBE_BOARD_DB_PATH"];
-const TASK_ID = process.env["AGENT_TRAIL_TASK_ID"] ?? process.env["VIBE_BOARD_TASK_ID"];
-const EXECUTION_ID = process.env["AGENT_TRAIL_EXECUTION_ID"] ?? process.env["VIBE_BOARD_EXECUTION_ID"];
-const REPO_ROOT = process.env["AGENT_TRAIL_ROOT"] ?? process.cwd();
+const DB_PATH = process.env["INVENTARIUM_DB_PATH"] ?? process.env["AGENT_TRAIL_DB_PATH"];
+const TASK_ID = process.env["INVENTARIUM_TASK_ID"] ?? process.env["AGENT_TRAIL_TASK_ID"];
+const EXECUTION_ID = process.env["INVENTARIUM_EXECUTION_ID"] ?? process.env["AGENT_TRAIL_EXECUTION_ID"];
+const REPO_ROOT = process.env["INVENTARIUM_ROOT"] ?? process.cwd();
 
 if (!DB_PATH || !TASK_ID || !EXECUTION_ID) {
   process.stderr.write(
-    "ask-human MCP: missing required env vars AGENT_TRAIL_DB_PATH, AGENT_TRAIL_TASK_ID, AGENT_TRAIL_EXECUTION_ID\n",
+    "ask-human MCP: missing required env vars INVENTARIUM_DB_PATH, INVENTARIUM_TASK_ID, INVENTARIUM_EXECUTION_ID\n",
   );
   process.exit(1);
 }
@@ -30,7 +30,7 @@ if (!DB_PATH || !TASK_ID || !EXECUTION_ID) {
 const db = new Database(DB_PATH);
 
 const server = new Server(
-  { name: "agent-trail", version: "0.2.0" },
+  { name: "inventarium", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -41,7 +41,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         "Pause execution and ask the human a question. Use this when you need clarification, " +
         "a decision, credentials, or approval before proceeding. " +
-        "The human will be notified and can answer via the agent-trail UI. " +
+        "The human will be notified and can answer via the inventarium UI. " +
         "After calling this tool you MUST stop all work and output only: AWAITING_HUMAN",
       inputSchema: {
         type: "object",

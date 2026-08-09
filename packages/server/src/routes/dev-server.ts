@@ -4,7 +4,7 @@
  * server subprocesses — keeping the API server pure REST + SSE so a crash
  * here doesn't kill running dev servers.
  *
- * The runner is reachable at AGENT_TRAIL_RUNNER_URL (default http://localhost:3003).
+ * The runner is reachable at INVENTARIUM_RUNNER_URL (default http://localhost:3003).
  * If the runner is down, requests return 503 with a clear hint to start it.
  */
 
@@ -12,7 +12,7 @@ import { Hono } from "hono";
 import { getDb, rowToBoard } from "../db.ts";
 import { detectDevConfig } from "../dev-server-manager.ts";
 
-const RUNNER_URL = process.env["AGENT_TRAIL_RUNNER_URL"] ?? process.env["VIBE_BOARD_RUNNER_URL"] ?? "http://localhost:3003";
+const RUNNER_URL = process.env["INVENTARIUM_RUNNER_URL"] ?? process.env["AGENT_TRAIL_RUNNER_URL"] ?? "http://localhost:3003";
 
 export const devServerRouter = new Hono();
 
@@ -34,7 +34,7 @@ async function forward(path: string, init?: RequestInit): Promise<Response> {
     return new Response(
       JSON.stringify({
         error: "Runner unreachable",
-        hint: `The agent-trail runner is not responding at ${RUNNER_URL}. Start it with \`bun runner\` (or \`bun start\`).`,
+        hint: `The inventarium runner is not responding at ${RUNNER_URL}. Start it with \`bun runner\` (or \`bun start\`).`,
         details: err instanceof Error ? err.message : String(err),
       }),
       { status: 503, headers: { "Content-Type": "application/json" } },

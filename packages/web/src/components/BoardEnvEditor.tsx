@@ -75,7 +75,7 @@ export function BoardEnvEditor({ boardId }: Props) {
       await api.boards.setEnv(boardId, [{ key: row.key, value: row.value }]);
       // After save the value is now persisted. Mark non-new + keep revealed state.
       setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, busy: false, isNew: false } : r)));
-      window.dispatchEvent(new CustomEvent("agent-trail:env-changed", { detail: { boardId } }));
+      window.dispatchEvent(new CustomEvent("inventarium:env-changed", { detail: { boardId } }));
     } catch (err) {
       setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, busy: false, error: err instanceof Error ? err.message : String(err) } : r)));
     }
@@ -93,7 +93,7 @@ export function BoardEnvEditor({ boardId }: Props) {
     try {
       await api.boards.deleteEnv(boardId, row.key);
       setRows((rs) => rs.filter((_, i) => i !== idx));
-      window.dispatchEvent(new CustomEvent("agent-trail:env-changed", { detail: { boardId } }));
+      window.dispatchEvent(new CustomEvent("inventarium:env-changed", { detail: { boardId } }));
     } catch (err) {
       setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, busy: false, error: err instanceof Error ? err.message : String(err) } : r)));
     }

@@ -138,7 +138,7 @@ export function BoardSettings({ board, onUpdated }: Props) {
           <Group label="implementation directory">
             <Field label="where claude writes code">
               <input
-                placeholder="~/agent-trail-runs/<board>"
+                placeholder="~/inventarium-runs/<board>"
                 value={implementationDir}
                 onChange={(e) => { setImplementationDir(e.target.value); setSaved(false); }}
                 style={{ ...inputStyle }}

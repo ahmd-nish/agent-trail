@@ -15,12 +15,12 @@
 ### `ask_human` MCP server (`packages/core/src/mcp/ask-human.ts`)
 - MCP server built with `@modelcontextprotocol/sdk`
 - Exposes single tool: `ask_human(question, context?)`
-- Writes row to `decision_tickets` table (DB path via `AGENT_TRAIL_DB_PATH` env var)
+- Writes row to `decision_tickets` table (DB path via `INVENTARIUM_DB_PATH` env var)
 - Returns `PAUSE_EXECUTION:<ticketId>` sentinel + instruction to output `AWAITING_HUMAN`
 - Spawned per-task via `--mcp-config` injection (always present, not optional)
 
 ### MCP config manager (updated)
-- `write(taskId, requestedMcps, askHumanOpts)` — always includes `agent-trail` (ask_human) MCP
+- `write(taskId, requestedMcps, askHumanOpts)` — always includes `inventarium` (ask_human) MCP
 - Merges task-specific MCPs from `.mcp.json` on top
 - Returns path to temp JSON file (required, not nullable — ask_human is always present)
 

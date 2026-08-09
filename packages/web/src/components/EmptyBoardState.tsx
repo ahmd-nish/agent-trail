@@ -59,7 +59,7 @@ export function EmptyBoardState({ onPlanned, onOpenPlan }: Props) {
           drop in a PRD and get a task graph
         </div>
         <div className="text-[11px]" style={{ color: "var(--fg-faded)" }}>
-          agent-trail plans the work, runs Claude Code on parallelizable tasks under a TDD gate,
+          inventarium plans the work, runs Claude Code on parallelizable tasks under a TDD gate,
           and pings you when a human decision is needed.
         </div>
       </div>

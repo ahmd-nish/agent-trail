@@ -1,15 +1,15 @@
 {
-  "name": "@agent-trail/mcp-server",
+  "name": "@inventarium/mcp-server",
   "version": "1.0.0",
   "private": true,
   "license": "MIT",
-  "description": "Standalone MCP server exposing the agent-trail board as tools for Claude Code.",
+  "description": "Standalone MCP server exposing the inventarium board as tools for Claude Code.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "url": "https://github.com/ahmd-nish/inventarium.git",
     "directory": "packages/mcp-server"
   },
-  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
+  "homepage": "https://github.com/ahmd-nish/inventarium#readme",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -22,7 +22,7 @@
     "dev": "bun --hot src/index.ts"
   },
   "dependencies": {
-    "@agent-trail/core": "workspace:*",
+    "@inventarium/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0"
   }
 }

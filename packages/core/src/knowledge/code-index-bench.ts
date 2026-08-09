@@ -8,7 +8,7 @@
 //
 // One metric from §3.3 is deliberately NOT here: "discovery tool calls, with vs
 // without". It requires running real agent executions on an unfamiliar repo,
-// and §3.3 is explicit that measuring it on agent-trail understates the value
+// and §3.3 is explicit that measuring it on inventarium understates the value
 // (live telemetry: Grep 1, Glob 20 across 38 executions — there is no headroom
 // left to recover). Reporting it from this corpus would be worse than not
 // reporting it.
@@ -134,7 +134,7 @@ const EXPORT_SHAPES: Array<{ shape: string; re: RegExp; names: (line: string) =>
 const SCANNABLE = /\.(m?[tj]sx?|cts|mts)$/;
 
 /** Files touched by recent commits — a realistic stand-in for what tasks touch.
- *  Used because agent-trail's own `tasks.likely_paths` is empty on every row
+ *  Used because inventarium's own `tasks.likely_paths` is empty on every row
  *  (the field was never populated before the Phase 0 fix). */
 export function changedFileCorpus(root: string, commits = 40): string[] {
   try {
@@ -269,7 +269,7 @@ export async function runCodeIndexBench(
 
   return {
     adapter: index.name,
-    corpus: { name: opts.corpusName ?? "agent-trail", source: corpusSource, files: corpus.length },
+    corpus: { name: opts.corpusName ?? "inventarium", source: corpusSource, files: corpus.length },
     coverage: {
       filesTotal: corpus.length,
       filesWithSymbols,

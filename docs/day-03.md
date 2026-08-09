@@ -28,7 +28,7 @@
 ## Technical notes
 - Tailwind v4: uses `@import "tailwindcss"` in CSS + `@tailwindcss/vite` Vite plugin (no config file)
 - React 19 installed (bun resolved ^18.3 → 19.2.6) — works fine with @vitejs/plugin-react v6
-- SQLite DB created at `agent-trail.db` in the CWD when the server starts
+- SQLite DB created at `inventarium.db` in the CWD when the server starts
 - `task.dependsOn` stored as JSON string in SQLite; mapper parses on read
 
 ---
@@ -48,6 +48,6 @@
 
 ### Key constraints
 - Worktree path: `<repo-root>/.worktrees/<taskId>`
-- MCP config temp path: `<os.tmpdir()>/agent-trail-mcp-<taskId>.json`
+- MCP config temp path: `<os.tmpdir()>/inventarium-mcp-<taskId>.json`
 - Max 3 concurrent executions (enforced in dispatcher)
 - Stream-json parser must handle multiple `assistant` events with the same `message.id`

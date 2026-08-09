@@ -18,7 +18,7 @@ export function useTabTitle({ running, awaitingHuman }: Counts) {
     }
 
     if (awaitingHuman > 0) {
-      const titles = [`(${awaitingHuman}) ⚠ agent-trail`, `agent-trail ⚠`];
+      const titles = [`(${awaitingHuman}) ⚠ inventarium`, `inventarium ⚠`];
       let idx = 0;
       document.title = titles[0]!;
       pulseRef.current = setInterval(() => {
@@ -28,10 +28,10 @@ export function useTabTitle({ running, awaitingHuman }: Counts) {
       }, 1500);
       setBadge(awaitingHuman, "#f59e0b").catch(() => undefined);
     } else if (running > 0) {
-      document.title = `(${running}) agent-trail`;
+      document.title = `(${running}) inventarium`;
       setRunningSpinner().catch(() => undefined);
     } else {
-      document.title = "agent-trail";
+      document.title = "inventarium";
       clear();
     }
 

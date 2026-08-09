@@ -1,4 +1,4 @@
-# Robust Testing System Roadmap for agent-trail
+# Robust Testing System Roadmap for inventarium
 
 A 6-phase plan to build a comprehensive, production-grade testing system with richer assertions, lifecycle management, history tracking, export capabilities, and full protocol support.
 
@@ -301,7 +301,7 @@ New skill: `export-tests` button on task detail.
   ```
 - One `it()` per case, assertions inlined
 - Parameterize base URL from env var or `.env`
-- Round-trip safe: wrap auto-generated code in `// agent-trail:auto-start` / `// agent-trail:auto-end` markers; preserve user edits outside
+- Round-trip safe: wrap auto-generated code in `// inventarium:auto-start` / `// inventarium:auto-end` markers; preserve user edits outside
 
 **For pytest** (`board.implementation_dir` is Python):
 - Generate `tests/test_<task-slug>.py`
@@ -487,7 +487,7 @@ Each package's `package.json`:
 }
 ```
 
-Allows `bun test -F @agent-trail/server` for per-package runs.
+Allows `bun test -F @inventarium/server` for per-package runs.
 
 **Deliverables**:
 - 8 new test files covering all routes + adapters
@@ -535,7 +535,7 @@ Phase 6 (testing infrastructure)  ────────────┘
 |---|---|---|
 | Scope | **All 6 phases** | Full roadmap |
 | JSONPath | **`jsonpath-plus`** (npm) | Mature, RFC 9535 subset, 8 KB, handles slice/filter/recursive descent — hand-rolled parser would be fragile on real responses |
-| Env-var storage | **Encrypted at rest** (AES-256-GCM) | Master key in `~/.agent-trail/master.key` (mode 0600), generated on first run. Per-value IV. Store `{ciphertext, iv, tag}` base64 in DB. |
+| Env-var storage | **Encrypted at rest** (AES-256-GCM) | Master key in `~/.inventarium/master.key` (mode 0600), generated on first run. Per-value IV. Store `{ciphertext, iv, tag}` base64 in DB. |
 | Export formats | **Both `bun:test` + `pytest`** in Phase 4 | Same PR, same delimiter scheme, runtime picked by `board.implementation_dir` detection |
 | CI | **GitHub Actions** + Codecov | `oven-sh/setup-bun@v1`, runs `bun test --coverage`, publishes to codecov.io. README badge. |
 | Coverage threshold | **Start warn-only**, gate at **50%** after Phase 6 | Repo currently sits around 10% — soft-start, then ratchet up. Codecov status check informs but doesn't block until Phase 6 lands. |

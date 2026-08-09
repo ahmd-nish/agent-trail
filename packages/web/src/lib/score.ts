@@ -1,8 +1,8 @@
-const TODAY_KEY  = "agent-trail.score.today";
-const DATE_KEY   = "agent-trail.score.date";
-const STREAK_KEY = "agent-trail.score.streak";
-const LAST_KEY   = "agent-trail.score.lastActive";
-const TOTAL_KEY  = "agent-trail.score.total";
+const TODAY_KEY  = "inventarium.score.today";
+const DATE_KEY   = "inventarium.score.date";
+const STREAK_KEY = "inventarium.score.streak";
+const LAST_KEY   = "inventarium.score.lastActive";
+const TOTAL_KEY  = "inventarium.score.total";
 
 const MILESTONES = [5, 10, 25, 50, 100, 200, 500];
 

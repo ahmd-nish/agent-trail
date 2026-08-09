@@ -5,7 +5,11 @@ build/
 *.log
 .env
 .env.local
+.inventarium/
+# legacy state dirs — still present on machines that predate the rename,
+# and must stay ignored or a `git add -A` sweeps thousands of replay files in.
 .agent-trail/
+.vibe-board/
 *.db
 *.db-shm
 *.db-wal

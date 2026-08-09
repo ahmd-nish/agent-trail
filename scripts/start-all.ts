@@ -7,9 +7,9 @@
  * Process layout once this is up:
  *
  *   start-all.ts (this process)
- *   ├─ agent-trail runner   :3003   (owns dev server children)
+ *   ├─ inventarium runner   :3003   (owns dev server children)
  *   │   └─ <dev servers, detached, not in this tree>
- *   └─ agent-trail server   :3002   (Hono REST + SSE, talks to runner via HTTP)
+ *   └─ inventarium server   :3002   (Hono REST + SSE, talks to runner via HTTP)
  *
  * Anything that hangs/crashes in one role does NOT take down the other.
  */
@@ -29,7 +29,7 @@ interface Service {
 
 const SERVICES: Service[] = [
   // Runner starts first so the server can talk to it on first request.
-  { name: "runner", color: "\x1b[35m", command: "bun", args: ["run", "-F", "@agent-trail/runner", "dev"], port: 3003 },
+  { name: "runner", color: "\x1b[35m", command: "bun", args: ["run", "-F", "@inventarium/runner", "dev"], port: 3003 },
   { name: "server", color: "\x1b[36m", command: "bun", args: ["run", "dev:server"], port: 3002 },
 ];
 
@@ -57,7 +57,7 @@ async function main() {
   const shutdown = (signal: NodeJS.Signals | "exit") => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`${DIM}\nstopping agent-trail (${signal})…${RESET}`);
+    console.log(`${DIM}\nstopping inventarium (${signal})…${RESET}`);
     for (const { svc, proc } of procs) {
       if (!proc.killed) {
         try { proc.kill("SIGTERM"); }

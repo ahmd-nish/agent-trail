@@ -26,7 +26,7 @@ export function backfillFromContextDir(db: Database, root: string): BackfillRepo
     filesRead: [],
   };
 
-  const dir = join(root, ".agent-trail", "context");
+  const dir = join(root, ".inventarium", "context");
   if (!existsSync(dir)) return rpt;
 
   const projectId = basename(root) || "local";

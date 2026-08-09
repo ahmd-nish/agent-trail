@@ -2,14 +2,14 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, appendFileSync, statS
 import { execSync } from "node:child_process";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { resolveStateDir } from "../storage/paths.ts";
 
 // PRD_OPEN_SOURCE Phase 3 — team-context layer.
-// The `.agent-trail/context/` directory is the team's shared brain: every
+// The `.inventarium/context/` directory is the team's shared brain: every
 // answered decision ticket auto-appends here (§3.3); users add conventions
-// and architectural rulings via `agent-trail context add` (§3.2); the whole
+// and architectural rulings via `inventarium context add` (§3.2); the whole
 // pile is injected as an L0 "constitution" into every claude execution (§3.4).
 
-const CONTEXT_DIRNAME = ".agent-trail";
 const CONTEXT_SUBDIR = "context";
 const DECISIONS_FILE = "decisions.md";
 const DEFAULT_NOTES_FILE = "notes.md";
@@ -20,7 +20,11 @@ const DEFAULT_NOTES_FILE = "notes.md";
 const CONSTITUTION_CHAR_CAP = 8000;
 
 export function contextDir(root: string): string {
-  return join(root, CONTEXT_DIRNAME, CONTEXT_SUBDIR);
+  // Via resolveStateDir, not a hardcoded name, so a pre-rename `.agent-trail/`
+  // directory is migrated rather than silently orphaned. Hardcoding the
+  // current name here is exactly how a rename loses a user's context store:
+  // the code keeps working, against an empty directory.
+  return join(resolveStateDir(root), CONTEXT_SUBDIR);
 }
 
 export function ensureContextDir(root: string): string {
@@ -51,7 +55,7 @@ export function appendDecision(root: string, entry: DecisionEntry): string {
   if (isNew) {
     appendFileSync(
       path,
-      "# Decisions\n\nAuto-appended by agent-trail every time a decision ticket is answered.\nEach entry is a durable ruling any future agent execution will see.\n\n",
+      "# Decisions\n\nAuto-appended by inventarium every time a decision ticket is answered.\nEach entry is a durable ruling any future agent execution will see.\n\n",
       "utf8",
     );
   }
@@ -136,7 +140,7 @@ export interface LoadConstitutionOptions {
 
 /**
  * L0 constitution (§3.4) — read CLAUDE.md at the project root plus every
- * markdown file in `.agent-trail/context/`, concatenated with source-of-truth
+ * markdown file in `.inventarium/context/`, concatenated with source-of-truth
  * headers. Hard-capped at ~8K chars (~2K tokens); files past the cap are
  * omitted with a truncation marker on the last-included source.
  */
@@ -191,7 +195,7 @@ export function loadConstitution(root: string, opts: LoadConstitutionOptions = {
         } catch {
           continue;
         }
-        consider(full, `.agent-trail/context/${name}`);
+        consider(full, `.inventarium/context/${name}`);
       }
     } catch {
       // Directory listing failed — treat as no context files.

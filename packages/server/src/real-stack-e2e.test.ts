@@ -77,17 +77,17 @@ function cli(args: string[], env: Record<string, string> = {}): { out: string; c
 }
 
 function startServer(opts: { port: number; root: string; dbPath: string; extra?: Record<string, string> }): ChildProcess {
-  const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...clean } = process.env;
+  const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...clean } = process.env;
   return spawn("bun", [SERVER], {
     cwd: opts.root,
     env: {
       ...clean,
-      AGENT_TRAIL_PORT: String(opts.port),
-      AGENT_TRAIL_ROOT: opts.root,
-      AGENT_TRAIL_DB_PATH: opts.dbPath,
-      AGENT_TRAIL_SKIP_RUNNER: "1",
-      AGENT_TRAIL_SKIP_AUTOSYNC: "1",
-      AGENT_TRAIL_SKIP_HYDRATE: "1",
+      INVENTARIUM_PORT: String(opts.port),
+      INVENTARIUM_ROOT: opts.root,
+      INVENTARIUM_DB_PATH: opts.dbPath,
+      INVENTARIUM_SKIP_RUNNER: "1",
+      INVENTARIUM_SKIP_AUTOSYNC: "1",
+      INVENTARIUM_SKIP_HYDRATE: "1",
       ...(opts.extra ?? {}),
     },
     stdio: "ignore",
@@ -110,7 +110,7 @@ describe("REAL STACK — the seams unit tests never touch", () => {
   beforeAll(async () => {
     base = mkdtempSync(join(tmpdir(), "at-realstack-"));
     relayDb = join(base, "relay", "relay.db");
-    aliceDb = join(base, "alice", "agent-trail.db");
+    aliceDb = join(base, "alice", "inventarium.db");
     bobDb = join(base, "bob", "bob.db");
     mkdirSync(join(base, "relay"), { recursive: true });
     mkdirSync(join(base, "alice", "work", "src"), { recursive: true });
@@ -132,7 +132,7 @@ describe("REAL STACK — the seams unit tests never touch", () => {
     alicePort = await freeport();
     alice = startServer({
       port: alicePort, root: join(base, "alice"), dbPath: aliceDb,
-      extra: { AGENT_TRAIL_CLAUDE_MOCK: MOCK },
+      extra: { INVENTARIUM_CLAUDE_MOCK: MOCK },
     });
     if (!await waitForHealth(alicePort)) throw new Error("alice board did not start");
   }, 90_000);
@@ -145,7 +145,7 @@ describe("REAL STACK — the seams unit tests never touch", () => {
   });
 
   test("1. identity is provisioned through the real CLI", () => {
-    const env = { AGENT_TRAIL_DB_PATH: relayDb };
+    const env = { INVENTARIUM_DB_PATH: relayDb };
     expect(cli(["workspace", "create", "acme", "Acme"], env).code).toBe(0);
     expect(cli(["workspace", "member", "add", "acme", "github:1", "Alice", "--role", "member"], env).code).toBe(0);
     expect(cli(["workspace", "member", "add", "acme", "github:2", "Bob", "--role", "member"], env).code).toBe(0);
@@ -215,7 +215,7 @@ describe("REAL STACK — the seams unit tests never touch", () => {
     // against the broken code.
     const res = cli(
       ["knowledge", "sync", "--remote", remote, "--workspace", "acme", "--project", "alice", "--token", aliceToken],
-      { AGENT_TRAIL_DB_PATH: aliceDb },
+      { INVENTARIUM_DB_PATH: aliceDb },
     );
     expect(res.code).toBe(0);
     const pushed = Number(res.out.match(/pushed (\d+) event/)?.[1] ?? "0");
@@ -229,7 +229,7 @@ describe("REAL STACK — the seams unit tests never touch", () => {
     // could not resolve by file. bobDb has never existed before this line.
     const res = cli(
       ["knowledge", "sync", "--remote", remote, "--workspace", "acme", "--project", "alice", "--token", bobToken],
-      { AGENT_TRAIL_DB_PATH: bobDb },
+      { INVENTARIUM_DB_PATH: bobDb },
     );
     expect(res.code).toBe(0);
 
@@ -275,7 +275,7 @@ describe("REAL STACK — the seams unit tests never touch", () => {
       return { n, e };
     })();
 
-    cli(["knowledge", "sync", "--remote", remote, "--workspace", "acme", "--project", "alice", "--token", bobToken], { AGENT_TRAIL_DB_PATH: bobDb });
+    cli(["knowledge", "sync", "--remote", remote, "--workspace", "acme", "--project", "alice", "--token", bobToken], { INVENTARIUM_DB_PATH: bobDb });
 
     const db = new Database(bobDb, { readonly: true });
     const after = {

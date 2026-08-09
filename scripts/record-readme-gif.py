@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-# Record a short screencast of the agent-trail demo mode → assemble into GIF.
+# Record a short screencast of the inventarium demo mode → assemble into GIF.
 # Requires: playwright (chromium installed), ffmpeg on PATH.
 #
 # Usage:
 #   1. Start the app in demo mode: bun packages/cli/src/index.ts --demo --no-open
 #   2. Run: python3 scripts/record-readme-gif.py
-#   3. Output: docs/agent-trail-demo.gif
+#   3. Output: docs/inventarium-demo.gif
 
 import os, sys, time, subprocess, pathlib
 from playwright.sync_api import sync_playwright
 
 ROOT   = pathlib.Path(__file__).resolve().parent.parent
 FRAMES = ROOT / ".tmp-frames"
-OUT    = ROOT / "docs" / "agent-trail-demo.gif"
+OUT    = ROOT / "docs" / "inventarium-demo.gif"
 
-URL     = os.environ.get("AGENT_TRAIL_URL", "http://localhost:3002/?demo=1")
+URL     = os.environ.get("INVENTARIUM_URL", "http://localhost:3002/?demo=1")
 WIDTH   = int(os.environ.get("GIF_WIDTH",  "1200"))
 HEIGHT  = int(os.environ.get("GIF_HEIGHT", "680"))
 SECONDS = int(os.environ.get("GIF_SECONDS", "14"))

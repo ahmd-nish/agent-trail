@@ -5,7 +5,7 @@
 // contract is anchored to the commit it was extracted at, and validity is a
 // QUERY answered at pack time.
 //
-// Why this exists at all: agent-trail does not originate every mutation to a
+// Why this exists at all: inventarium does not originate every mutation to a
 // repo, and no system that assumed otherwise has been right. `git revert`,
 // merge-conflict resolution, rebases, dependabot bumps, generated code, a
 // teammate on Cursor, a 2am one-character hotfix — none of them flow through

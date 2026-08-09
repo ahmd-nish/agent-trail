@@ -5,10 +5,14 @@ import { createServer } from "node:net";
 import { basename, join } from "node:path";
 import { addNote, contextDir, ensureContextDir } from "../../core/src/context/store.ts";
 import { exportToFile, hydrateFromFile, readStateFile, statePath } from "../../core/src/context/sync.ts";
-import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
+import { resolveDbPath, resolveProjectRoot, migrateLegacyPaths } from "../../core/src/storage/paths.ts";
 
-const DEFAULT_PORT = Number(process.env["AGENT_TRAIL_PORT"] ?? process.env["PORT"] ?? 3002);
-const BASE_URL_FROM_ENV = process.env["AGENT_TRAIL_URL"] ?? process.env["VIBE_BOARD_URL"];
+// Rename vibe-board / agent-trail data to the current name before any
+// code joins a hardcoded path. Idempotent and best-effort.
+migrateLegacyPaths();
+
+const DEFAULT_PORT = Number(process.env["INVENTARIUM_PORT"] ?? process.env["PORT"] ?? 3002);
+const BASE_URL_FROM_ENV = process.env["INVENTARIUM_URL"] ?? process.env["AGENT_TRAIL_URL"];
 let BASE_URL = BASE_URL_FROM_ENV ?? `http://localhost:${DEFAULT_PORT}`;
 
 // The CLI ships alongside the server package. In the published npm layout the
@@ -34,7 +38,7 @@ const c = {
 
 const [, , rawCmd, ...rest] = process.argv;
 // No subcommand OR a flag as first arg → default to `init` (launch flow).
-// This is what `npx agent-trail` and `npx agent-trail --demo` land in.
+// This is what `npx inventarium` and `npx inventarium --demo` land in.
 const cmd = !rawCmd || rawCmd.startsWith("--") ? "init" : rawCmd;
 const initArgs = !rawCmd || rawCmd.startsWith("--") ? [rawCmd, ...rest].filter(Boolean) as string[] : rest;
 
@@ -100,7 +104,7 @@ async function cmdInit(args: string[]) {
   const requestedPort = portFlag ? Number(portFlag) : (BASE_URL_FROM_ENV ? undefined : DEFAULT_PORT);
 
   if (!SERVER_ENTRY) {
-    console.error(`${c.red("✗")} Server package not found next to the CLI. Is agent-trail installed correctly?`);
+    console.error(`${c.red("✗")} Server package not found next to the CLI. Is inventarium installed correctly?`);
     process.exit(1);
   }
 
@@ -108,7 +112,7 @@ async function cmdInit(args: string[]) {
   let port = requestedPort ?? DEFAULT_PORT;
   const alreadyUp = await ping();
   if (alreadyUp) {
-    console.log(`${c.green("✓")} agent-trail already running at ${c.bold(BASE_URL)}`);
+    console.log(`${c.green("✓")} inventarium already running at ${c.bold(BASE_URL)}`);
     if (!noOpen) openBrowser(BASE_URL + (demoMode ? "/?demo=1" : ""));
     return;
   }
@@ -120,7 +124,7 @@ async function cmdInit(args: string[]) {
 
   checkPrerequisites({ warnOnly: demoMode });
 
-  console.log(`${c.dim("Starting agent-trail…")} ${c.dim(`(port ${port})`)}`);
+  console.log(`${c.dim("Starting inventarium…")} ${c.dim(`(port ${port})`)}`);
 
   // Prefer bun (native SQLite bindings). Fall back to node if bun isn't in PATH
   // — the caller will see a clear error rather than a silent failure.
@@ -133,9 +137,9 @@ async function cmdInit(args: string[]) {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        AGENT_TRAIL_PORT: String(port),
+        INVENTARIUM_PORT: String(port),
         // Server default already uses CWD; pass explicit for clarity.
-        AGENT_TRAIL_ROOT: process.env["AGENT_TRAIL_ROOT"] ?? process.cwd(),
+        INVENTARIUM_ROOT: process.env["INVENTARIUM_ROOT"] ?? process.cwd(),
       },
     },
   );
@@ -158,7 +162,7 @@ async function cmdInit(args: string[]) {
   }
 
   const openUrl = BASE_URL + (demoMode ? "/?demo=1" : "");
-  console.log(`${c.green("✓")} agent-trail running at ${c.bold(openUrl)}`);
+  console.log(`${c.green("✓")} inventarium running at ${c.bold(openUrl)}`);
   console.log(`${c.dim("  press Ctrl-C to stop")}`);
 
   if (!noOpen) openBrowser(openUrl);
@@ -166,7 +170,7 @@ async function cmdInit(args: string[]) {
 
 async function cmdStart(taskId: string | undefined) {
   if (!taskId) {
-    console.error(`Usage: agent-trail start ${c.bold("<taskId>")}`);
+    console.error(`Usage: inventarium start ${c.bold("<taskId>")}`);
     process.exit(1);
   }
 
@@ -218,10 +222,10 @@ async function cmdStart(taskId: string | undefined) {
 }
 
 async function cmdPlan(args: string[]) {
-  // agent-trail plan <file> [--name <board>] [--dry-run] [--board <id>]
+  // inventarium plan <file> [--name <board>] [--dry-run] [--board <id>]
   const file = args.find((a) => !a.startsWith("--"));
   if (!file) {
-    console.error(`Usage: agent-trail plan ${c.bold("<prd-file>")} [--name <board-name>] [--board <id>] [--dry-run]`);
+    console.error(`Usage: inventarium plan ${c.bold("<prd-file>")} [--name <board-name>] [--board <id>] [--dry-run]`);
     process.exit(1);
   }
 
@@ -253,7 +257,7 @@ async function cmdPlan(args: string[]) {
       body: JSON.stringify({ prdText, name, boardId, dryRun }),
     });
   } catch {
-    console.error(`${c.red("✗")} Cannot reach server at ${BASE_URL} — run ${c.bold("agent-trail init")} first`);
+    console.error(`${c.red("✗")} Cannot reach server at ${BASE_URL} — run ${c.bold("inventarium init")} first`);
     process.exit(1);
   }
 
@@ -295,7 +299,7 @@ async function cmdPlan(args: string[]) {
 }
 
 async function cmdDoctor() {
-  console.log(`${c.bold("agent-trail doctor")} ${c.dim("— preflight checks\n")}`);
+  console.log(`${c.bold("inventarium doctor")} ${c.dim("— preflight checks\n")}`);
   const checks: Array<{ name: string; ok: boolean; fix?: string; note?: string }> = [];
 
   // 1. Bun runtime
@@ -343,7 +347,7 @@ async function cmdDoctor() {
   // 6. CWD is writable (creates DB, worktrees, .mcp.json here)
   let cwdWritable = false;
   try {
-    const probe = join(process.cwd(), ".agent-trail-doctor-probe");
+    const probe = join(process.cwd(), ".inventarium-doctor-probe");
     await Bun.write(probe, "ok");
     await Bun.file(probe).exists();
     // best-effort cleanup
@@ -353,7 +357,7 @@ async function cmdDoctor() {
   checks.push({
     name: "cwd writable",
     ok: cwdWritable,
-    fix: cwdWritable ? undefined : `Run agent-trail from a directory you can write to (current: ${process.cwd()})`,
+    fix: cwdWritable ? undefined : `Run inventarium from a directory you can write to (current: ${process.cwd()})`,
   });
 
   // Render
@@ -368,10 +372,10 @@ async function cmdDoctor() {
 
   console.log("");
   if (hasFail) {
-    console.log(`${c.red("✗")} One or more checks failed — fix them, then rerun ${c.bold("agent-trail doctor")}.`);
+    console.log(`${c.red("✗")} One or more checks failed — fix them, then rerun ${c.bold("inventarium doctor")}.`);
     process.exit(1);
   }
-  console.log(`${c.green("✓")} Ready to run ${c.bold("agent-trail")}`);
+  console.log(`${c.green("✓")} Ready to run ${c.bold("inventarium")}`);
 }
 
 async function cmdStatus() {
@@ -380,7 +384,7 @@ async function cmdStatus() {
     const res = await apiFetch("/api/boards");
     boards = await res.json();
   } catch {
-    console.error(`${c.red("✗")} Cannot reach server at ${BASE_URL} — run ${c.bold("agent-trail init")} first`);
+    console.error(`${c.red("✗")} Cannot reach server at ${BASE_URL} — run ${c.bold("inventarium init")} first`);
     process.exit(1);
   }
 
@@ -421,9 +425,9 @@ async function cmdStatus() {
 
 function printHelp() {
   console.log(`
-${c.bold("agent-trail")} — AI-native kanban board for Claude Code
+${c.bold("inventarium")} — AI-native kanban board for Claude Code
 
-${c.dim("Usage:")} agent-trail ${c.dim("[command] [flags]")}
+${c.dim("Usage:")} inventarium ${c.dim("[command] [flags]")}
 
 ${c.dim("With no command, launches the server + opens the board.")}
 
@@ -433,11 +437,11 @@ ${c.dim("Commands:")}
   ${c.bold("start")} <taskId>                  Execute a task and stream live events
   ${c.bold("run")}   --task <id> [--ci]        Headless run — poll for terminal state, print markdown summary
   ${c.bold("resume")} <taskId>                 Resume the task's previous claude session
-  ${c.bold("context")} add "<text>"            Append a team ruling to .agent-trail/context/notes.md
+  ${c.bold("context")} add "<text>"            Append a team ruling to .inventarium/context/notes.md
   ${c.bold("context")} ls                      List markdown files in the team context store
-  ${c.bold("sync")} export|import|status       Export/import the board+task graph to .agent-trail/state.json
+  ${c.bold("sync")} export|import|status       Export/import the board+task graph to .inventarium/state.json
   ${c.bold("loop")} --board <id> [--budget $N] Run the whole board DAG until done / budget / decision ticket
-  ${c.bold("library")} add|new|ls|rm            Manage the team agent library (.agent-trail/library/agents/)
+  ${c.bold("library")} add|new|ls|rm            Manage the team agent library (.inventarium/library/agents/)
   ${c.bold("deploy")} --board <id> --target <n> Deploy a board via a configured target (human-gated by default)
   ${c.bold("knowledge")} backfill|ls|fold      Shared team knowledge log (docs/knowledgelayer.md)
   ${c.bold("workspace")} create|member|token   Relay identity: workspaces, members, API tokens
@@ -564,7 +568,7 @@ function priorityColor(p: string): string {
 }
 
 // PRD_OPEN_SOURCE 2.7 — headless CI mode.
-// Usage: agent-trail run --task <id> --ci [--timeout 900]
+// Usage: inventarium run --task <id> --ci [--timeout 900]
 //   • Kicks off the task's execution
 //   • Polls /api/tasks/:boardId/tasks (via the task-belongs-to-board lookup)
 //     until the task lands terminal (`in_review`, `done`, `blocked`, `failed`)
@@ -575,7 +579,7 @@ async function cmdRun(args: string[]) {
   const timeoutSec = Number(flagValue(args, "--timeout") ?? 1800);
   const ci = args.includes("--ci");
   if (!taskFlag) {
-    console.error(`Usage: agent-trail run --task ${c.bold("<taskId>")} [--ci] [--timeout <seconds>]`);
+    console.error(`Usage: inventarium run --task ${c.bold("<taskId>")} [--ci] [--timeout <seconds>]`);
     process.exit(2);
   }
 
@@ -611,7 +615,7 @@ async function cmdRun(args: string[]) {
 
   const passed = terminal.status === "completed";
   const summary = [
-    `## agent-trail — task ${taskFlag.slice(0, 8)}`,
+    `## inventarium — task ${taskFlag.slice(0, 8)}`,
     "",
     `- **Result:** ${passed ? "✅ completed" : terminal.status === "awaiting_human" ? "⏸ awaiting_human" : "❌ failed"}`,
     `- Duration: ${(terminal.duration_ms ?? 0) / 1000}s`,
@@ -627,9 +631,9 @@ async function cmdRun(args: string[]) {
 }
 
 // PRD_OPEN_SOURCE 3.2 — team-context store CLI.
-//   agent-trail context add "<text>" [--file conventions]
-//   agent-trail context ls
-// Writes land under <project root>/.agent-trail/context/ so every future
+//   inventarium context add "<text>" [--file conventions]
+//   inventarium context ls
+// Writes land under <project root>/.inventarium/context/ so every future
 // execution picks them up via the L0 constitution loader (§3.4).
 async function cmdContext(args: string[]) {
   const sub = args[0];
@@ -643,22 +647,22 @@ async function cmdContext(args: string[]) {
     }
     const text = positional.join(" ").trim();
     if (!text) {
-      console.error(`Usage: agent-trail context add ${c.bold(`"<text>"`)} [--file <name>]`);
+      console.error(`Usage: inventarium context add ${c.bold(`"<text>"`)} [--file <name>]`);
       process.exit(2);
     }
-    const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+    const root = process.env["INVENTARIUM_ROOT"] ?? resolveProjectRoot();
     const path = addNote(root, { text, file });
     console.log(`${c.green("✓")} appended to ${c.bold(path)}`);
     return;
   }
   if (sub === "ls" || sub === "list") {
-    const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+    const root = process.env["INVENTARIUM_ROOT"] ?? resolveProjectRoot();
     const dir = contextDir(root);
     ensureContextDir(root);
     const files = readdirSync(dir).filter((f) => /\.mdx?$/i.test(f)).sort();
     if (files.length === 0) {
       console.log(`${c.dim("(empty)")}  ${c.dim(dir)}`);
-      console.log(`  Add your first ruling: ${c.bold(`agent-trail context add "..."`)}`);
+      console.log(`  Add your first ruling: ${c.bold(`inventarium context add "..."`)}`);
       return;
     }
     console.log(`${c.dim(dir)}`);
@@ -670,12 +674,12 @@ async function cmdContext(args: string[]) {
     }
     return;
   }
-  console.error(`Usage: agent-trail context ${c.bold("add|ls")} [args]`);
+  console.error(`Usage: inventarium context ${c.bold("add|ls")} [args]`);
   process.exit(2);
 }
 
 // PRD_OPEN_SOURCE §5.6 — deploy agent CLI.
-//   agent-trail deploy --board <id> --target <name> [--auto-confirm] [--yes] [--timeout 900]
+//   inventarium deploy --board <id> --target <name> [--auto-confirm] [--yes] [--timeout 900]
 // Default: raise a decision ticket, print the deploy id, and poll until the
 // deploy status leaves 'pending' (i.e. the user confirmed elsewhere). --yes
 // answers the ticket immediately from the CLI. --auto-confirm skips the
@@ -687,7 +691,7 @@ async function cmdDeploy(args: string[]) {
   const autoConfirm = args.includes("--auto-confirm");
   const yes = args.includes("--yes") || autoConfirm;
   if (!boardId || !target) {
-    console.error(`Usage: agent-trail deploy --board ${c.bold("<id>")} --target ${c.bold("<name>")} [--auto-confirm] [--yes]`);
+    console.error(`Usage: inventarium deploy --board ${c.bold("<id>")} --target ${c.bold("<name>")} [--auto-confirm] [--yes]`);
     process.exit(2);
   }
 
@@ -740,9 +744,9 @@ async function cmdDeploy(args: string[]) {
 }
 
 // knowledgelayer.md §4.1–§4.2 — knowledge event log CLI.
-//   agent-trail knowledge backfill    Sweep existing .agent-trail/context/*.md into events
-//   agent-trail knowledge ls [--type <t>] [--limit <n>]   List active events
-//   agent-trail knowledge fold [--cap <chars>]            Preview the constitution projection
+//   inventarium knowledge backfill    Sweep existing .inventarium/context/*.md into events
+//   inventarium knowledge ls [--type <t>] [--limit <n>]   List active events
+//   inventarium knowledge fold [--cap <chars>]            Preview the constitution projection
 async function cmdKnowledge(args: string[]) {
   const sub = args[0];
   const { Database } = await import("bun:sqlite");
@@ -759,7 +763,7 @@ async function cmdKnowledge(args: string[]) {
   const root = resolveProjectRoot();
   const db = new Database(resolveDbPath(root));
   // Fresh installs pre-migration might not have the table yet — apply the DDL
-  // idempotently so `bunx @agent-trail/cli knowledge …` works before the
+  // idempotently so `bunx inventarium knowledge …` works before the
   // server has ever started.
   db.exec(KNOWLEDGE_EVENTS_DDL);
   for (const s of KNOWLEDGE_EVENTS_INDEXES) db.exec(s);
@@ -781,7 +785,7 @@ async function cmdKnowledge(args: string[]) {
     switch (sub) {
       case "backfill": {
         const rpt = backfillFromContextDir(db, root);
-        console.log(`${c.bold("Backfill from")} ${c.dim(root + "/.agent-trail/context/")}`);
+        console.log(`${c.bold("Backfill from")} ${c.dim(root + "/.inventarium/context/")}`);
         for (const f of rpt.filesRead) console.log(`  ${c.dim("read")} ${f}`);
         console.log(`  ${c.green("+")} ${rpt.decisionsInserted} decisions · ${c.dim(String(rpt.decisionsSkipped) + " already present")}`);
         console.log(`  ${c.green("+")} ${rpt.notesInserted} conventions · ${c.dim(String(rpt.notesSkipped) + " already present")}`);
@@ -808,7 +812,7 @@ async function cmdKnowledge(args: string[]) {
         return;
       }
       case "export": {
-        const outDir = flagValue(args, "--dir") ?? path.join(root, ".agent-trail", "export");
+        const outDir = flagValue(args, "--dir") ?? path.join(root, ".inventarium", "export");
         const includeSuperseded = args.includes("--include-superseded");
         fs.mkdirSync(outDir, { recursive: true });
         const jsonl = exportEventsToJsonl(db, { includeSuperseded });
@@ -824,7 +828,7 @@ async function cmdKnowledge(args: string[]) {
       }
       case "import": {
         const file = args[1] ?? flagValue(args, "--file");
-        if (!file) { console.error(`${c.red("✗")} usage: agent-trail knowledge import <events.jsonl>`); process.exit(2); }
+        if (!file) { console.error(`${c.red("✗")} usage: inventarium knowledge import <events.jsonl>`); process.exit(2); }
         const jsonl = fs.readFileSync(file, "utf8");
         const rpt = importEventsFromJsonl(db, jsonl);
         console.log(`${c.green("+")} imported ${rpt.inserted} event(s) · ${c.dim(String(rpt.skipped) + " already present or malformed")}`);
@@ -837,7 +841,7 @@ async function cmdKnowledge(args: string[]) {
         const rpt = runBench(db, since ? { since } : undefined);
         const emitJson = args.includes("--json");
         if (emitJson) { console.log(JSON.stringify(rpt, null, 2)); return; }
-        console.log(`${c.bold("agent-trail bench")}  ${c.dim(rpt.windowStart.slice(0, 10) + " → " + rpt.windowEnd.slice(0, 10))}`);
+        console.log(`${c.bold("inventarium bench")}  ${c.dim(rpt.windowStart.slice(0, 10) + " → " + rpt.windowEnd.slice(0, 10))}`);
         console.log("");
         console.log(`${c.bold("Tasks")}         ${rpt.tasks.total} total · ${c.green(String(rpt.tasks.completed) + " completed")} · ${c.red(String(rpt.tasks.failed) + " failed/blocked")} · ${c.dim("completion " + (rpt.tasks.completionRate * 100).toFixed(1) + "%")}`);
         console.log(`${c.bold("Tokens")}        ${(rpt.tokens.totalInput / 1000).toFixed(1)}K in / ${(rpt.tokens.totalOutput / 1000).toFixed(1)}K out · avg ${Math.round(rpt.tokens.avgInputPerExecution)} + ${Math.round(rpt.tokens.avgOutputPerExecution)} per execution`);
@@ -917,10 +921,10 @@ async function cmdKnowledge(args: string[]) {
         // never a conflict to resolve; offline just means the cursors do not
         // advance and the next run sends the same batch.
         const { syncOnce, getSyncState, localIdentities } = await import("../../core/src/knowledge/sync.ts");
-        const remote = flagValue(args, "--remote") ?? process.env["AGENT_TRAIL_RELAY_URL"];
+        const remote = flagValue(args, "--remote") ?? process.env["INVENTARIUM_RELAY_URL"];
         if (!remote) {
-          console.error(`${c.red("✗")} usage: agent-trail knowledge sync --remote <url> [--workspace <id>] [--project <id>]`);
-          console.error(c.dim("  or set AGENT_TRAIL_RELAY_URL. Token via --token or AGENT_TRAIL_RELAY_TOKEN."));
+          console.error(`${c.red("✗")} usage: inventarium knowledge sync --remote <url> [--workspace <id>] [--project <id>]`);
+          console.error(c.dim("  or set INVENTARIUM_RELAY_URL. Token via --token or INVENTARIUM_RELAY_TOKEN."));
           process.exit(2);
         }
         // Events are emitted with workspace_id='local' and project_id=<repo
@@ -933,7 +937,7 @@ async function cmdKnowledge(args: string[]) {
           projectId,
           localWorkspaceId: flagValue(args, "--local-workspace") ?? "local",
           localProjectId: flagValue(args, "--local-project") ?? projectId,
-          token: flagValue(args, "--token") ?? process.env["AGENT_TRAIL_RELAY_TOKEN"],
+          token: flagValue(args, "--token") ?? process.env["INVENTARIUM_RELAY_TOKEN"],
           localOnly: args.includes("--local-only"),
         });
         if (res.skipped) {
@@ -964,7 +968,7 @@ async function cmdKnowledge(args: string[]) {
         return;
       }
       default:
-        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate\n  ${c.bold("sync")} --remote <url>               Push/pull the event log against a relay (§4.6)\n       [--project <id>] [--local-project <id>] [--token <t>] [--local-only]`);
+        console.log(`${c.bold("inventarium knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .inventarium/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate\n  ${c.bold("sync")} --remote <url>               Push/pull the event log against a relay (§4.6)\n       [--project <id>] [--local-project <id>] [--token <t>] [--local-only]`);
         process.exit(sub ? 1 : 0);
     }
   } finally {
@@ -973,24 +977,24 @@ async function cmdKnowledge(args: string[]) {
 }
 
 // PRD_OPEN_SOURCE §4.1/§4.2 — team library CLI.
-//   agent-trail library add <url> [--overwrite]
-//   agent-trail library new <name> [--description "..."]
-//   agent-trail library ls
-//   agent-trail library rm <name>
+//   inventarium library add <url> [--overwrite]
+//   inventarium library new <name> [--description "..."]
+//   inventarium library ls
+//   inventarium library rm <name>
 async function cmdLibrary(args: string[]) {
   const sub = args[0];
   const { addNote: _n } = await import("../../core/src/context/store.ts"); void _n; // side-effect-free import (kept for future use)
   const {
     listAgents, readAgent, saveAgent, deleteAgent, scaffoldAgent, importAgentFromUrl,
   } = await import("../../core/src/library/store.ts");
-  const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+  const root = process.env["INVENTARIUM_ROOT"] ?? resolveProjectRoot();
 
   if (sub === "add") {
     const positional = args.slice(1).filter((a) => !a.startsWith("--"));
     const url = positional[0];
     const overwrite = args.includes("--overwrite");
     if (!url) {
-      console.error(`Usage: agent-trail library add ${c.bold("<url>")} [--overwrite]`);
+      console.error(`Usage: inventarium library add ${c.bold("<url>")} [--overwrite]`);
       process.exit(2);
     }
     const r = await importAgentFromUrl(root, url, { overwrite });
@@ -1004,7 +1008,7 @@ async function cmdLibrary(args: string[]) {
     const name = positional[0];
     const description = flagValue(args, "--description");
     if (!name) {
-      console.error(`Usage: agent-trail library new ${c.bold("<name>")} [--description "..."]`);
+      console.error(`Usage: inventarium library new ${c.bold("<name>")} [--description "..."]`);
       process.exit(2);
     }
     const scaff = scaffoldAgent(name, description ?? "TODO: describe what this agent is good at");
@@ -1018,7 +1022,7 @@ async function cmdLibrary(args: string[]) {
   if (sub === "ls" || sub === "list") {
     const entries = listAgents(root);
     if (entries.length === 0) {
-      console.log(`${c.dim("(empty)")}  Add one: ${c.bold("agent-trail library add <url>")}  or  ${c.bold("agent-trail library new <name>")}`);
+      console.log(`${c.dim("(empty)")}  Add one: ${c.bold("inventarium library add <url>")}  or  ${c.bold("inventarium library new <name>")}`);
       return;
     }
     for (const e of entries) {
@@ -1030,7 +1034,7 @@ async function cmdLibrary(args: string[]) {
   if (sub === "rm" || sub === "remove") {
     const name = args[1];
     if (!name) {
-      console.error(`Usage: agent-trail library rm ${c.bold("<name>")}`);
+      console.error(`Usage: inventarium library rm ${c.bold("<name>")}`);
       process.exit(2);
     }
     if (!readAgent(root, name)) {
@@ -1042,12 +1046,12 @@ async function cmdLibrary(args: string[]) {
     return;
   }
 
-  console.error(`Usage: agent-trail library ${c.bold("add|new|ls|rm")} [args]`);
+  console.error(`Usage: inventarium library ${c.bold("add|new|ls|rm")} [args]`);
   process.exit(2);
 }
 
 // PRD_OPEN_SOURCE §5.4 — Board loop CLI. "Ralph the backlog" —
-//   agent-trail loop --board <id> [--budget $2.50] [--timeout 3600]
+//   inventarium loop --board <id> [--budget $2.50] [--timeout 3600]
 // Kicks off /run, then polls tasks + cost every 3s and stops on:
 //   • every task in a terminal status (done / in_review / blocked / failed)
 //   • a decision ticket appearing (human input needed — this is the whole point)
@@ -1058,7 +1062,7 @@ async function cmdLoop(args: string[]) {
   const budgetUsd = Number(flagValue(args, "--budget") ?? 0);
   const timeoutSec = Number(flagValue(args, "--timeout") ?? 3600);
   if (!boardId) {
-    console.error(`Usage: agent-trail loop --board ${c.bold("<boardId>")} [--budget <usd>] [--timeout <sec>]`);
+    console.error(`Usage: inventarium loop --board ${c.bold("<boardId>")} [--budget <usd>] [--timeout <sec>]`);
     process.exit(2);
   }
 
@@ -1137,10 +1141,10 @@ function printBoardSummary(tasks: Array<{ id: string; title: string; status: str
   }
 }
 
-// PRD_OPEN_SOURCE 3.1 — export/import the board+task graph as .agent-trail/state.json.
+// PRD_OPEN_SOURCE 3.1 — export/import the board+task graph as .inventarium/state.json.
 async function cmdSync(args: string[]) {
   const sub = args[0];
-  const root = process.env["AGENT_TRAIL_ROOT"] ?? resolveProjectRoot();
+  const root = process.env["INVENTARIUM_ROOT"] ?? resolveProjectRoot();
   if (sub === "export") {
     const { Database } = await import("bun:sqlite");
     const db = new Database(resolveDbPath(root));
@@ -1176,7 +1180,7 @@ async function cmdSync(args: string[]) {
     const state = readStateFile(root);
     if (!state) {
       console.log(`${c.dim("(no state.json)")}  ${c.dim(path)}`);
-      console.log(`  ${c.bold("agent-trail sync export")} to seed it.`);
+      console.log(`  ${c.bold("inventarium sync export")} to seed it.`);
       return;
     }
     console.log(`${c.bold(path)}`);
@@ -1186,14 +1190,14 @@ async function cmdSync(args: string[]) {
     console.log(`  tasks:     ${state.tasks.length}`);
     return;
   }
-  console.error(`Usage: agent-trail sync ${c.bold("export|import|status")}`);
+  console.error(`Usage: inventarium sync ${c.bold("export|import|status")}`);
   process.exit(2);
 }
 
 // PRD_OPEN_SOURCE 2.2 — resume a task's previous claude session.
 async function cmdResume(taskId: string | undefined) {
   if (!taskId) {
-    console.error(`Usage: agent-trail resume ${c.bold("<taskId>")}`);
+    console.error(`Usage: inventarium resume ${c.bold("<taskId>")}`);
     process.exit(2);
   }
   const res = await apiFetch(`/api/tasks/${taskId}/resume`, { method: "POST" });
@@ -1210,13 +1214,13 @@ async function cmdResume(taskId: string | undefined) {
 // knowledgelayer §5.1 — relay identity. Run on the RELAY HOST: these commands
 // write to the relay's own database, which is where membership lives.
 //
-//   agent-trail workspace create <id> <name>
-//   agent-trail workspace ls
-//   agent-trail workspace member add <workspaceId> <externalId> <displayName> [--role member]
-//   agent-trail workspace member rm  <workspaceId> <userId>
-//   agent-trail workspace token create <workspaceId> <externalId> [--label x] [--ttl-days 90]
-//   agent-trail workspace token ls <workspaceId>
-//   agent-trail workspace token revoke <tokenId>
+//   inventarium workspace create <id> <name>
+//   inventarium workspace ls
+//   inventarium workspace member add <workspaceId> <externalId> <displayName> [--role member]
+//   inventarium workspace member rm  <workspaceId> <userId>
+//   inventarium workspace token create <workspaceId> <externalId> [--label x] [--ttl-days 90]
+//   inventarium workspace token ls <workspaceId>
+//   inventarium workspace token revoke <tokenId>
 
 async function cmdWorkspace(args: string[]): Promise<void> {
   const W = await import("../../core/src/knowledge/workspace.ts");
@@ -1230,7 +1234,7 @@ async function cmdWorkspace(args: string[]): Promise<void> {
     switch (sub) {
       case "create": {
         const id = args[1], name = args[2] ?? args[1];
-        if (!id) { console.error(`${c.red("✗")} usage: agent-trail workspace create <id> <name>`); process.exit(2); }
+        if (!id) { console.error(`${c.red("✗")} usage: inventarium workspace create <id> <name>`); process.exit(2); }
         W.createWorkspace(db, { id, name: name! });
         console.log(`${c.green("+")} workspace ${c.bold(id)} created`);
         return;
@@ -1250,7 +1254,7 @@ async function cmdWorkspace(args: string[]): Promise<void> {
         if (action === "add") {
           const [, , ws, externalId, displayName] = args;
           if (!ws || !externalId || !displayName) {
-            console.error(`${c.red("✗")} usage: agent-trail workspace member add <workspaceId> <externalId> <displayName> [--role member]`);
+            console.error(`${c.red("✗")} usage: inventarium workspace member add <workspaceId> <externalId> <displayName> [--role member]`);
             console.error(c.dim("  externalId should be stable, e.g. github:12345 — never a renameable login."));
             process.exit(2);
           }
@@ -1263,12 +1267,12 @@ async function cmdWorkspace(args: string[]): Promise<void> {
         }
         if (action === "rm") {
           const [, , ws, userId] = args;
-          if (!ws || !userId) { console.error(`${c.red("✗")} usage: agent-trail workspace member rm <workspaceId> <userId>`); process.exit(2); }
+          if (!ws || !userId) { console.error(`${c.red("✗")} usage: inventarium workspace member rm <workspaceId> <userId>`); process.exit(2); }
           W.removeMember(db, ws, userId);
           console.log(`${c.green("+")} removed ${userId} from ${ws} ${c.dim("(their tokens for this workspace were revoked)")}`);
           return;
         }
-        console.error(`${c.red("✗")} usage: agent-trail workspace member add|rm …`);
+        console.error(`${c.red("✗")} usage: inventarium workspace member add|rm …`);
         process.exit(2);
         return;
       }
@@ -1276,7 +1280,7 @@ async function cmdWorkspace(args: string[]): Promise<void> {
         const action = args[1];
         if (action === "create") {
           const [, , ws, externalId] = args;
-          if (!ws || !externalId) { console.error(`${c.red("✗")} usage: agent-trail workspace token create <workspaceId> <externalId> [--label x] [--ttl-days 90]`); process.exit(2); }
+          if (!ws || !externalId) { console.error(`${c.red("✗")} usage: inventarium workspace token create <workspaceId> <externalId> [--label x] [--ttl-days 90]`); process.exit(2); }
           const userRow = db.query("SELECT id FROM workspace_users WHERE external_id = ?").get(externalId) as { id: string } | null;
           if (!userRow) { console.error(`${c.red("✗")} no such user ${externalId} — add them with \`workspace member add\` first`); process.exit(1); }
           if (!W.getRole(db, ws, userRow!.id)) { console.error(`${c.red("✗")} ${externalId} is not a member of ${ws}`); process.exit(1); }
@@ -1293,7 +1297,7 @@ async function cmdWorkspace(args: string[]): Promise<void> {
         }
         if (action === "ls") {
           const ws = args[2];
-          if (!ws) { console.error(`${c.red("✗")} usage: agent-trail workspace token ls <workspaceId>`); process.exit(2); }
+          if (!ws) { console.error(`${c.red("✗")} usage: inventarium workspace token ls <workspaceId>`); process.exit(2); }
           const rows = W.listTokens(db, ws);
           if (!rows.length) { console.log(c.dim("(no tokens)")); return; }
           for (const t of rows) {
@@ -1304,18 +1308,18 @@ async function cmdWorkspace(args: string[]): Promise<void> {
         }
         if (action === "revoke") {
           const id = args[2];
-          if (!id) { console.error(`${c.red("✗")} usage: agent-trail workspace token revoke <tokenId>`); process.exit(2); }
+          if (!id) { console.error(`${c.red("✗")} usage: inventarium workspace token revoke <tokenId>`); process.exit(2); }
           console.log(W.revokeToken(db, id)
             ? `${c.green("+")} token ${id} revoked`
             : `${c.amber("~")} token ${id} was already revoked or does not exist`);
           return;
         }
-        console.error(`${c.red("✗")} usage: agent-trail workspace token create|ls|revoke …`);
+        console.error(`${c.red("✗")} usage: inventarium workspace token create|ls|revoke …`);
         process.exit(2);
         return;
       }
       default:
-        console.log(`${c.bold("agent-trail workspace")}  ${c.dim("(run on the relay host)")}\n\nUsage:\n  ${c.bold("create")} <id> <name>\n  ${c.bold("ls")}\n  ${c.bold("member add")} <ws> <externalId> <displayName> [--role viewer|member|admin|owner]\n  ${c.bold("member rm")} <ws> <userId>\n  ${c.bold("token create")} <ws> <externalId> [--label x] [--ttl-days 90]\n  ${c.bold("token ls")} <ws>\n  ${c.bold("token revoke")} <tokenId>`);
+        console.log(`${c.bold("inventarium workspace")}  ${c.dim("(run on the relay host)")}\n\nUsage:\n  ${c.bold("create")} <id> <name>\n  ${c.bold("ls")}\n  ${c.bold("member add")} <ws> <externalId> <displayName> [--role viewer|member|admin|owner]\n  ${c.bold("member rm")} <ws> <userId>\n  ${c.bold("token create")} <ws> <externalId> [--label x] [--ttl-days 90]\n  ${c.bold("token ls")} <ws>\n  ${c.bold("token revoke")} <tokenId>`);
         process.exit(sub ? 1 : 0);
     }
   } finally {

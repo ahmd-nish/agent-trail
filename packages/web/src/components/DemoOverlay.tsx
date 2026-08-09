@@ -113,17 +113,17 @@ export function DemoOverlay({ decision, done, player, onDecisionAnswered }: Prop
             <div className="text-[14px] font-medium">This was a demo replay</div>
             <div className="text-[11px] leading-relaxed" style={{ color: "var(--fg-dim)" }}>
               The events you just saw came from a recorded golden run — zero API cost.
-              To run agent-trail on your own repo:
+              To run inventarium on your own repo:
             </div>
             <div
               className="w-full rounded px-3 py-2 text-[11px] font-mono text-left"
               style={{ background: "var(--bg-panel)", border: "1px solid var(--line)" }}
             >
-              npx agent-trail
+              npx inventarium
             </div>
             <div className="flex gap-2">
               <a
-                href="https://github.com/anthropics/agent-trail"
+                href="https://github.com/anthropics/inventarium"
                 target="_blank"
                 rel="noreferrer"
                 className="claw-btn primary"

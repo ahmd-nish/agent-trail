@@ -20,7 +20,7 @@ export const DEFAULT_PREFS: FeedPrefs = {
   confetti: true,
 };
 
-const STORAGE_KEY = "agent-trail.prefs";
+const STORAGE_KEY = "inventarium.prefs";
 
 function load(): FeedPrefs {
   try {

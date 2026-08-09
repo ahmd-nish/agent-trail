@@ -1,6 +1,6 @@
-# Running agent-trail for a team
+# Running inventarium for a team
 
-Everything in agent-trail works on one machine with no setup. This guide is for the part that
+Everything in inventarium works on one machine with no setup. This guide is for the part that
 doesn't: **sharing what your agents learn between people.**
 
 The promise: Sarah's agent fails a particular way on `src/auth.ts`. Tomorrow your agent picks up
@@ -28,9 +28,9 @@ The relay is the same binary as the board. There is no separate build.
 
 ```bash
 # on a box your team can reach
-git clone https://github.com/ahmd-nish/agent-trail && cd agent-trail
+git clone https://github.com/ahmd-nish/inventarium && cd inventarium
 bun install
-AGENT_TRAIL_PORT=3002 AGENT_TRAIL_DB_PATH=/var/lib/agent-trail/relay.db \
+INVENTARIUM_PORT=3002 INVENTARIUM_DB_PATH=/var/lib/inventarium/relay.db \
   bun packages/server/src/index.ts
 ```
 
@@ -52,7 +52,7 @@ Put it behind TLS. Tokens are bearer credentials and this speaks plain HTTP on i
 Run these **on the relay host** — membership lives in the relay's database.
 
 ```bash
-export AGENT_TRAIL_DB_PATH=/var/lib/agent-trail/relay.db
+export INVENTARIUM_DB_PATH=/var/lib/inventarium/relay.db
 
 bun cli workspace create acme "Acme Inc"
 
@@ -118,8 +118,8 @@ bun cli knowledge sync \
 Or set it once and forget:
 
 ```bash
-export AGENT_TRAIL_RELAY_URL=https://relay.acme.dev
-export AGENT_TRAIL_RELAY_TOKEN=at_...
+export INVENTARIUM_RELAY_URL=https://relay.acme.dev
+export INVENTARIUM_RELAY_TOKEN=at_...
 bun cli knowledge sync --workspace acme --project my-repo
 ```
 
@@ -174,8 +174,8 @@ log either, whether or not you ever sync.
 For one team and one relay you can skip per-user tokens:
 
 ```bash
-AGENT_TRAIL_RELAY_TOKEN=some-long-secret \
-AGENT_TRAIL_RELAY_WORKSPACE=acme \
+INVENTARIUM_RELAY_TOKEN=some-long-secret \
+INVENTARIUM_RELAY_WORKSPACE=acme \
   bun packages/server/src/index.ts
 ```
 

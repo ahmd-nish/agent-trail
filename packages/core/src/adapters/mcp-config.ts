@@ -46,18 +46,18 @@ export class McpConfigManager {
 
     // Always include ask_human. Emit both new + legacy env vars for one release
     // so users mid-upgrade with stale spawned MCP processes keep working.
-    scoped["agent-trail"] = {
+    scoped["inventarium"] = {
       command: "bun",
       args: [askHuman.scriptPath],
       env: {
+        INVENTARIUM_DB_PATH: askHuman.dbPath,
+        INVENTARIUM_TASK_ID: askHuman.taskId,
+        INVENTARIUM_EXECUTION_ID: askHuman.executionId,
+        // §4.4 — repo/context root so the MCP tools can read memories.
+        INVENTARIUM_ROOT: this.repoRoot,
         AGENT_TRAIL_DB_PATH: askHuman.dbPath,
         AGENT_TRAIL_TASK_ID: askHuman.taskId,
         AGENT_TRAIL_EXECUTION_ID: askHuman.executionId,
-        // §4.4 — repo/context root so the MCP tools can read memories.
-        AGENT_TRAIL_ROOT: this.repoRoot,
-        VIBE_BOARD_DB_PATH: askHuman.dbPath,
-        VIBE_BOARD_TASK_ID: askHuman.taskId,
-        VIBE_BOARD_EXECUTION_ID: askHuman.executionId,
       },
     };
 
@@ -66,13 +66,13 @@ export class McpConfigManager {
       if (allServers[name]) scoped[name] = allServers[name]!;
     }
 
-    const path = join(tmpdir(), `agent-trail-mcp-${taskId}.json`);
+    const path = join(tmpdir(), `inventarium-mcp-${taskId}.json`);
     writeFileSync(path, JSON.stringify({ mcpServers: scoped }, null, 2));
     return path;
   }
 
   cleanup(taskId: string): void {
-    const path = join(tmpdir(), `agent-trail-mcp-${taskId}.json`);
+    const path = join(tmpdir(), `inventarium-mcp-${taskId}.json`);
     if (existsSync(path)) {
       try {
         unlinkSync(path);

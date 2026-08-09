@@ -1,7 +1,7 @@
 // knowledgelayer-v2 §3.1 — the code-index adapter interface.
 //
 // Strategy (§0): symbol extraction and call-graph traversal became a commodity
-// in 2026. agent-trail consumes that half and builds the half nobody has — the
+// in 2026. inventarium consumes that half and builds the half nobody has — the
 // asserted knowledge log and the join between them (§J). This file is the seam.
 //
 // Four rules from §3.1, each load-bearing:
@@ -338,7 +338,7 @@ function escapeRegExp(s: string): string {
  * until then this always yields `native`, which is rule 2 working as designed
  * rather than a stub.
  *
- * `AGENT_TRAIL_CODE_INDEX` selects a backend by name. An unknown or unavailable
+ * `INVENTARIUM_CODE_INDEX` selects a backend by name. An unknown or unavailable
  * name falls back to native with a warning rather than failing a spawn — a dead
  * backend must be a config problem, not an outage (§11 risk 1).
  */
@@ -348,7 +348,7 @@ export async function resolveCodeIndex(opts: {
   registry?: Record<string, (root: string) => CodeIndex>;
 }): Promise<CodeIndex> {
   const native = new NativeCodeIndex({ root: opts.root });
-  const prefer = opts.prefer ?? process.env.AGENT_TRAIL_CODE_INDEX;
+  const prefer = opts.prefer ?? process.env.INVENTARIUM_CODE_INDEX;
   if (!prefer || prefer === "native") return native;
 
   const factory = opts.registry?.[prefer];

@@ -12,7 +12,7 @@ const dbPath = resolveDbPath(repoRoot);
 const scriptPath = join(repoRoot, "packages/core/src/mcp/board-server.ts");
 
 const proc = spawn("bun", [scriptPath], {
-  env: { ...process.env, AGENT_TRAIL_DB_PATH: dbPath },
+  env: { ...process.env, INVENTARIUM_DB_PATH: dbPath },
   stdio: "inherit",
 });
 

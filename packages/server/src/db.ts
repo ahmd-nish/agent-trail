@@ -105,7 +105,7 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
   },
   {
     version: 6,
-    description: "Rename vibe-board.db → agent-trail.db (handled at file level in paths.ts)",
+    description: "Rename vibe-board.db → inventarium.db (handled at file level in paths.ts)",
     up: () => {
       // No-op: the actual rename happens in resolveDbPath() before the DB is
       // opened. Recorded here so the schema_version row exists for any tooling
@@ -403,7 +403,7 @@ const MIGRATIONS: ReadonlyArray<{ version: number; description: string; up: (db:
     description: "knowledgelayer §4.1 — knowledge_events (typed, append-only log)",
     up: (db) => {
       // The substrate every other primitive in the shared knowledge layer
-      // is a deterministic fold of. Owned by @agent-trail/core; DDL lives
+      // is a deterministic fold of. Owned by @inventarium/core; DDL lives
       // in packages/core/src/knowledge/schema.ts so the migration and the
       // in-memory tests share one source of truth.
       db.exec(KNOWLEDGE_EVENTS_DDL);

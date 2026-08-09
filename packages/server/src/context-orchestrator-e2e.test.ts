@@ -9,7 +9,7 @@ import { createServer } from "node:net";
 // PRD_OPEN_SOURCE §4.4 (§D slice) — context orchestrator MVP.
 //
 // Rules asserted here:
-//   1. After a task's terminal success, .agent-trail/context/memories/<taskId>.md
+//   1. After a task's terminal success, .inventarium/context/memories/<taskId>.md
 //      lands with a heuristic summary.
 //   2. A downstream DAG task picking up the same board sees the dependency's
 //      summary inside its own system prompt — proven by the mock's
@@ -77,18 +77,18 @@ describe("context orchestrator — PRD §4.4 (§D slice)", () => {
     tmp = mkdtempSync(join(tmpdir(), "at-ctx-orch-"));
     workDir = join(tmp, "work");
     mkdirSync(workDir, { recursive: true });
-    dbPath = join(tmp, "agent-trail.db");
+    dbPath = join(tmp, "inventarium.db");
     port = await findFreePort();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...cleanEnv } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...cleanEnv } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...cleanEnv,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_SKIP_AUTOSYNC: "1",
-        AGENT_TRAIL_CLAUDE_MOCK: ECHO_SCENARIO,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_SKIP_AUTOSYNC: "1",
+        INVENTARIUM_CLAUDE_MOCK: ECHO_SCENARIO,
       },
       stdio: "ignore",
     });
@@ -109,7 +109,7 @@ describe("context orchestrator — PRD §4.4 (§D slice)", () => {
     if (tmp) rmSync(tmp, { recursive: true, force: true });
   });
 
-  test("finishing a task writes .agent-trail/context/memories/<taskId>.md", async () => {
+  test("finishing a task writes .inventarium/context/memories/<taskId>.md", async () => {
     const dep = await (await fetch(`http://localhost:${port}/api/boards/${boardId}/tasks`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -126,7 +126,7 @@ describe("context orchestrator — PRD §4.4 (§D slice)", () => {
       return t?.status === "in_review" ? t : null;
     });
 
-    const memPath = join(tmp, ".agent-trail", "context", "memories", `${dep.id}.md`);
+    const memPath = join(tmp, ".inventarium", "context", "memories", `${dep.id}.md`);
     expect(existsSync(memPath)).toBe(true);
   }, 20000);
 

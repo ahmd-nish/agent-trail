@@ -1,14 +1,14 @@
 {
-  "name": "@agent-trail/core",
+  "name": "@inventarium/core",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Core primitives for agent-trail: DAG planner, Claude Code adapter, MCP servers, test runner, context store, model router.",
+  "description": "Core primitives for inventarium: DAG planner, Claude Code adapter, MCP servers, test runner, context store, model router.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ahmd-nish/agent-trail.git",
+    "url": "https://github.com/ahmd-nish/inventarium.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/ahmd-nish/agent-trail#readme",
+  "homepage": "https://github.com/ahmd-nish/inventarium#readme",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {

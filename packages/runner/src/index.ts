@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { manager } from "./manager.ts";
 
-const RUNNER_PORT = Number(process.env["AGENT_TRAIL_RUNNER_PORT"] ?? process.env["VIBE_BOARD_RUNNER_PORT"] ?? 3003);
+const RUNNER_PORT = Number(process.env["INVENTARIUM_RUNNER_PORT"] ?? process.env["AGENT_TRAIL_RUNNER_PORT"] ?? 3003);
 
 const app = new Hono();
 
@@ -9,7 +9,7 @@ app.get("/health", (c) => c.json({ ok: true, role: "runner", ts: new Date().toIS
 
 // ─── Dev server endpoints ────────────────────────────────────────────────────
 // Mirrors the previous /api/boards/:id/dev/* shape but mounted at /dev/:boardId/*
-// for clarity. The agent-trail server proxies the public routes to here.
+// for clarity. The inventarium server proxies the public routes to here.
 
 app.get("/dev/:boardId/status", async (c) => {
   return c.json(await manager.status(c.req.param("boardId")));
@@ -37,7 +37,7 @@ app.get("/dev/:boardId/logs", (c) => {
 
 const boot = manager.bootstrap();
 console.log(
-  `agent-trail runner listening on http://localhost:${RUNNER_PORT}` +
+  `inventarium runner listening on http://localhost:${RUNNER_PORT}` +
   (boot.adopted > 0 ? ` (adopted ${boot.adopted} live process${boot.adopted === 1 ? "" : "es"})` : "") +
   (boot.dropped > 0 ? ` (cleaned up ${boot.dropped} dead entr${boot.dropped === 1 ? "y" : "ies"})` : ""),
 );

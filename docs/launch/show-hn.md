@@ -4,13 +4,13 @@
 
 **Title (69 chars, under HN's 80 limit):**
 
-> Show HN: agent-trail – Multiplayer AI coding agents with a shared team memory
+> Show HN: inventarium – Multiplayer AI coding agents with a shared team memory
 
-**Submission URL:** https://github.com/ahmd-nish/agent-trail
+**Submission URL:** https://github.com/ahmd-nish/inventarium
 
 **Post body (goes below the URL — HN hides it behind "more" but people click):**
 
-I built agent-trail because every team-memory tool asks people to write down what they know. agent-trail already watches them do the work — so the knowledge writes itself, and every teammate's agent inherits it.
+I built inventarium because every team-memory tool asks people to write down what they know. inventarium already watches them do the work — so the knowledge writes itself, and every teammate's agent inherits it.
 
 Drop a PRD → get a task graph → watch Claude Code execute each task in an isolated worktree under a TDD gate, with a live activity feed. When the agent hits a judgment call, it pauses and asks a human via the `ask_human` MCP tool. Every one of those answers, every failed test attempt, every thrash detection, every steer becomes a durable, attributed knowledge event that shows up in the next agent's prompt.
 
@@ -34,17 +34,17 @@ Written in TypeScript / Bun. MIT. Local-first — nothing phones home; SQLite is
 >
 > **What I want from HN:** design partners (small teams already running Claude Code together), critical feedback on the architecture doc (`docs/knowledgelayer.md` in the repo), and anyone who's built one of the frameworks I'm citing (please tell me if I'm mis-characterizing your work).
 >
-> Repo: https://github.com/ahmd-nish/agent-trail
-> Plan doc: https://github.com/ahmd-nish/agent-trail/blob/main/docs/knowledgelayer.md
-> Benchmark: https://github.com/ahmd-nish/agent-trail/blob/main/packages/core/src/knowledge/bench.ts
+> Repo: https://github.com/ahmd-nish/inventarium
+> Plan doc: https://github.com/ahmd-nish/inventarium/blob/main/docs/knowledgelayer.md
+> Benchmark: https://github.com/ahmd-nish/inventarium/blob/main/packages/core/src/knowledge/bench.ts
 
 ## Answering the standard HN objections
 
 **"How is this different from Byterover / BuildBetter / projectmem?"**
-Byterover and BuildBetter store memories someone writes; agent-trail generates them from execution. projectmem is the closest architectural relative and ships the single-user version — multiplayer sync is their explicit future-work item. Details in `docs/knowledgelayer.md` §5.4.
+Byterover and BuildBetter store memories someone writes; inventarium generates them from execution. projectmem is the closest architectural relative and ships the single-user version — multiplayer sync is their explicit future-work item. Details in `docs/knowledgelayer.md` §5.4.
 
 **"What happens to my data?"**
-Local-first. SQLite. Nothing phones home. Every event is redacted for secrets on the write path before it hits disk. `agent-trail knowledge export` writes JSONL + regenerated markdown + AGENTS.md at any time. Per-project `sync: local-only` flag lands with the relay.
+Local-first. SQLite. Nothing phones home. Every event is redacted for secrets on the write path before it hits disk. `inventarium knowledge export` writes JSONL + regenerated markdown + AGENTS.md at any time. Per-project `sync: local-only` flag lands with the relay.
 
 **"Is this a wrapper around Cursor / Claude Code?"**
 It orchestrates Claude Code today because that's what has stream-json and MCP support. The adapter interface in `packages/core/src/adapters/` is the extension point for Codex and Gemini CLI — the biggest pending contribution.

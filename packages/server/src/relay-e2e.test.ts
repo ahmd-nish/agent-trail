@@ -85,19 +85,19 @@ describe("relay — two machines, one workspace (§4.6)", () => {
 
   beforeAll(async () => {
     tmp = mkdtempSync(join(tmpdir(), "at-relay-"));
-    relayDbPath = join(tmp, "agent-trail.db");
+    relayDbPath = join(tmp, "inventarium.db");
     port = await freeport();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...clean } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...clean } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
         ...clean,
-        AGENT_TRAIL_PORT: String(port),
-        AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_SKIP_AUTOSYNC: "1",
-        AGENT_TRAIL_SKIP_HYDRATE: "1",
-        AGENT_TRAIL_DB_PATH: relayDbPath,
+        INVENTARIUM_PORT: String(port),
+        INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_SKIP_AUTOSYNC: "1",
+        INVENTARIUM_SKIP_HYDRATE: "1",
+        INVENTARIUM_DB_PATH: relayDbPath,
       },
       stdio: "ignore",
     });
@@ -105,7 +105,7 @@ describe("relay — two machines, one workspace (§4.6)", () => {
     remote = `http://localhost:${port}`;
 
     // Provision credentials directly against the relay's database, the way
-    // `agent-trail workspace token create` does on the relay host.
+    // `inventarium workspace token create` does on the relay host.
     const relayDb = new Database(relayDbPath);
     createWorkspace(relayDb, { id: "acme", name: "Acme" });
     createWorkspace(relayDb, { id: "rival", name: "Rival Corp" });

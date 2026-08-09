@@ -3,12 +3,12 @@ import { MODEL_FOR_TIER, type ModelTier } from "../planner/models.ts";
 /**
  * Wizard LLM call — defaults to Opus (top-of-ladder) so the plan is the
  * highest-quality output; caller may downshift for cheaper runs. Same
- * mock-first pattern as the planner. Tests set AGENT_TRAIL_IDEA_MOCK to either
+ * mock-first pattern as the planner. Tests set INVENTARIUM_IDEA_MOCK to either
  *   • raw JSON / markdown  (returned verbatim as the response), or
  *   • `file:<path>`        (contents of the file, useful for large fixtures).
  */
 export async function runIdeaLLM(prompt: string, tier: ModelTier = "opus"): Promise<string> {
-  const mock = process.env["AGENT_TRAIL_IDEA_MOCK"];
+  const mock = process.env["INVENTARIUM_IDEA_MOCK"];
   if (mock) {
     if (mock.startsWith("file:")) {
       return await Bun.file(mock.slice(5)).text();

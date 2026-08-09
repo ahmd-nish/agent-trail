@@ -63,13 +63,13 @@ describe("knowledge graph API (visual explorer)", () => {
     tmp = mkdtempSync(join(tmpdir(), "at-graph-"));
     dbPath = join(tmp, "at.db");
     port = await freeport();
-    const { AGENT_TRAIL_DB_PATH: _a, VIBE_BOARD_DB_PATH: _b, ...clean } = process.env;
+    const { INVENTARIUM_DB_PATH: _a, AGENT_TRAIL_DB_PATH: _b, ...clean } = process.env;
     child = spawn("bun", [SERVER_ENTRY], {
       cwd: tmp,
       env: {
-        ...clean, AGENT_TRAIL_PORT: String(port), AGENT_TRAIL_ROOT: tmp,
-        AGENT_TRAIL_DB_PATH: dbPath, AGENT_TRAIL_SKIP_RUNNER: "1",
-        AGENT_TRAIL_SKIP_AUTOSYNC: "1", AGENT_TRAIL_SKIP_HYDRATE: "1",
+        ...clean, INVENTARIUM_PORT: String(port), INVENTARIUM_ROOT: tmp,
+        INVENTARIUM_DB_PATH: dbPath, INVENTARIUM_SKIP_RUNNER: "1",
+        INVENTARIUM_SKIP_AUTOSYNC: "1", INVENTARIUM_SKIP_HYDRATE: "1",
       },
       stdio: "ignore",
     });

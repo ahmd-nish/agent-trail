@@ -15,7 +15,7 @@
 
 ### Board MCP server (`packages/core/src/mcp/board-server.ts`)
 - MCP server built with `@modelcontextprotocol/sdk`, StdioServerTransport
-- DB path via `AGENT_TRAIL_DB_PATH` env var
+- DB path via `INVENTARIUM_DB_PATH` env var
 - Exposes 4 tools:
   - `list_tasks(boardId?, status?)` — list/filter tasks from the board
   - `get_task(taskId)` — full task details
@@ -38,7 +38,7 @@
 - `api.artifacts.list(taskId)` + `api.export.board(boardId)` added to `api.ts`
 
 ### Root `package.json`
-- `mcp:board` script: `AGENT_TRAIL_DB_PATH=$(pwd)/agent-trail.db bun packages/core/src/mcp/board-server.ts`
+- `mcp:board` script: `INVENTARIUM_DB_PATH=$(pwd)/inventarium.db bun packages/core/src/mcp/board-server.ts`
 
 ---
 
@@ -66,5 +66,5 @@ server/index.ts:
 2. Write a sample PRD (`examples/sample-prd.md`) and run end-to-end: planner → task graph → run task → artifacts
 3. Harden error paths: handle `claude` CLI not found (friendly message), DB migration check on startup, env var validation
 4. Add `README.md` with architecture diagram, quickstart, and mcp:board usage
-5. `packages/cli/src/index.ts` — CLI entrypoint: `agent-trail init`, `agent-trail start`, `agent-trail status`
-6. Publish `@agent-trail/core` and `@agent-trail/server` to npm as v0.1.0
+5. `packages/cli/src/index.ts` — CLI entrypoint: `inventarium init`, `inventarium start`, `inventarium status`
+6. Publish `@inventarium/core` and `@inventarium/server` to npm as v0.1.0

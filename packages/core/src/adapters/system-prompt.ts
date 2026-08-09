@@ -25,7 +25,7 @@ No TDD gate — implement the full solution as described.`,
 
 /** knowledgelayer §4.4 Band A — identical for every task in every project.
  *  Nothing task-derived may ever enter this string. */
-export const ORG_PREAMBLE = "You are Claude Code executing a task inside an agent-trail pipeline.";
+export const ORG_PREAMBLE = "You are Claude Code executing a task inside an inventarium pipeline.";
 
 /**
  * Legacy single-blob entry point, kept so callers that have not moved to bands

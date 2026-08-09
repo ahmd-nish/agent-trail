@@ -9,7 +9,7 @@ import { DEFAULT_PERMISSION_MODE } from "../../../core/src/types/index.ts";
 import type { BlockerInfo } from "../execution-manager.ts";
 
 /**
- * Build a per-board implementation directory under ~/agent-trail-runs/.
+ * Build a per-board implementation directory under ~/inventarium-runs/.
  * The directory is created eagerly so Claude has somewhere to write on first run.
  */
 function defaultImplementationDir(boardName: string): string {
@@ -18,7 +18,7 @@ function defaultImplementationDir(boardName: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "board";
-  const path = join(homedir(), "agent-trail-runs", slug);
+  const path = join(homedir(), "inventarium-runs", slug);
   try {
     mkdirSync(path, { recursive: true });
   } catch (err) {

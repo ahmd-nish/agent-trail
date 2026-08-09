@@ -116,26 +116,26 @@ describe("detectRunner (T2.3)", () => {
     } finally { cleanup(dir); }
   });
 
-  test(".agent-trail/runner override wins over all heuristics", () => {
+  test(".inventarium/runner override wins over all heuristics", () => {
     const dir = fresh();
     try {
       writeFileSync(join(dir, "package.json"), JSON.stringify({
         name: "would-be-npm", scripts: { test: "vitest" },
       }));
-      mkdirSync(join(dir, ".agent-trail"), { recursive: true });
-      writeFileSync(join(dir, ".agent-trail", "runner"), "jest\n");
+      mkdirSync(join(dir, ".inventarium"), { recursive: true });
+      writeFileSync(join(dir, ".inventarium", "runner"), "jest\n");
       expect(detectRunner(dir)).toBe("jest");
     } finally { cleanup(dir); }
   });
 
-  test(".agent-trail/runner with an unknown value is ignored", () => {
+  test(".inventarium/runner with an unknown value is ignored", () => {
     const dir = fresh();
     try {
       writeFileSync(join(dir, "package.json"), JSON.stringify({
         name: "x", scripts: { test: "vitest" },
       }));
-      mkdirSync(join(dir, ".agent-trail"), { recursive: true });
-      writeFileSync(join(dir, ".agent-trail", "runner"), "moon-tests\n");
+      mkdirSync(join(dir, ".inventarium"), { recursive: true });
+      writeFileSync(join(dir, ".inventarium", "runner"), "moon-tests\n");
       expect(detectRunner(dir)).toBe("vitest");
     } finally { cleanup(dir); }
   });

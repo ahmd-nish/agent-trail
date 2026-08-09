@@ -1,14 +1,14 @@
-# Contributing to agent-trail
+# Contributing to inventarium
 
-Thanks for wanting to help. agent-trail is a small, focused kanban orchestrator for AI coding agents — the codebase reflects that. Bugs, adapters, subagents, and docs are all welcome.
+Thanks for wanting to help. inventarium is a small, focused kanban orchestrator for AI coding agents — the codebase reflects that. Bugs, adapters, subagents, and docs are all welcome.
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/anthropics/agent-trail
-cd agent-trail
+git clone https://github.com/anthropics/inventarium
+cd inventarium
 bun install
-bun run -F @agent-trail/web build
+bun run -F @inventarium/web build
 bun test
 ```
 
@@ -37,7 +37,7 @@ bun packages/cli/src/index.ts --demo
 - **`packages/core/`** — planner, adapters (claude-code, test-runner, worktree, mcp-config), telemetry parser, types. No HTTP, no React.
 - **`packages/server/`** — Hono routes, execution manager, DB migrations. All HTTP is here.
 - **`packages/web/`** — React + Vite + Tailwind. Kanban board, DAG view, task detail, cinematic feed.
-- **`packages/cli/`** — the `agent-trail` binary + `agent-trail doctor`. Bundled examples + subagents ship here.
+- **`packages/cli/`** — the `inventarium` binary + `inventarium doctor`. Bundled examples + subagents ship here.
 - **`packages/runner/`** — long-running dev-server manager (separate process on :3003).
 
 ## Adding a bundled subagent
