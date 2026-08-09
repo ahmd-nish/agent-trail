@@ -1,4 +1,6 @@
 import type { Database } from "bun:sqlite";
+import { hasEdgeTable } from "./edges.ts";
+import { pathUrns } from "./code-index.ts";
 import { list } from "./store.ts";
 
 // §5.3 — "the benchmark: your best marketing asset."
@@ -64,6 +66,24 @@ export interface BenchReport {
     totalActive: number;
     contextReuseRate: number;
     riskCoverage: number;
+    /**
+     * §8 — THE metric to own, because no tool in the category reports it.
+     *
+     * Fraction of tasks whose pack contained >= 1 knowledge event that was
+     * (a) authored by a DIFFERENT actor and (b) joined by a `governs` edge to
+     * a file the task ACTUALLY MODIFIED.
+     *
+     * Both clauses matter. (a) alone is contextReuseRate, which is vanity: it
+     * counts facts that were present, not facts that were relevant. (b) turns
+     * it into a claim about usefulness. Together they are the difference
+     * between a shared brain and a shared folder.
+     *
+     * `null` when no task in the window recorded modified files — distinct
+     * from a measured 0.
+     */
+    crossActorGovernanceRate: number | null;
+    /** Tasks that had modified files to judge — the sample size behind it. */
+    crossActorSampleSize: number;
   };
   notes: string[];
 }
@@ -211,6 +231,43 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
   if (actorSet.size <= 1) notes.push("single-actor run: context-reuse is definitionally 0 until a teammate shares the log");
   notes.push("token savings vs a naive-context baseline require the deferred seeded-corpus A/B — this report is over live telemetry only");
 
+  // ── §8 cross-actor governance rate ────────────────────────────────────────
+  const cross = (() => {
+    if (!hasEdgeTable(db)) return { rate: null as number | null, sample: 0 };
+    let sample = 0, hits = 0;
+    for (const t of taskRows) {
+      // Files the task ACTUALLY modified, taken from its own artifact_summary.
+      // likelyPaths is a prediction; this metric only credits real overlap.
+      const own = db.query(
+        `SELECT paths, actor_id FROM knowledge_events
+          WHERE task_id = ? AND type = 'artifact_summary'`,
+      ).all(t.id) as Array<{ paths: string; actor_id: string }>;
+      const modified = new Set<string>();
+      const ownActors = new Set<string>();
+      for (const r of own) {
+        ownActors.add(r.actor_id);
+        for (const p of safeJson(r.paths)) modified.add(p);
+      }
+      if (modified.size === 0) continue;
+      sample++;
+
+      const urns = [...modified].flatMap((p) => pathUrns(p));
+      if (urns.length === 0) continue;
+      const placeholders = urns.map(() => "?").join(",");
+      const governing = db.query(
+        `SELECT DISTINCT e.actor_id FROM knowledge_events e
+           JOIN knowledge_edges g ON g.src = 'kev:' || e.id
+          WHERE g.dst IN (${placeholders})
+            AND g.kind = 'governs'
+            AND e.superseded_by IS NULL
+            AND (e.task_id IS NULL OR e.task_id != ?)`,
+      ).all(...urns, t.id) as Array<{ actor_id: string }>;
+
+      if (governing.some((g) => !ownActors.has(g.actor_id))) hits++;
+    }
+    return { rate: sample === 0 ? null : hits / sample, sample };
+  })();
+
   return {
     windowStart: since,
     windowEnd: now,
@@ -246,6 +303,8 @@ export function runBench(db: Database, opts: BenchOptions = {}): BenchReport {
       totalActive,
       contextReuseRate,
       riskCoverage,
+      crossActorGovernanceRate: cross.rate,
+      crossActorSampleSize: cross.sample,
     },
     notes,
   };
@@ -258,4 +317,14 @@ function safeParsePaths(s: string): string[] {
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+
+function safeJson(s: string): string[] {
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
 }

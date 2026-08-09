@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { append } from "./store.ts";
 import { runBench } from "./bench.ts";
-import { KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES } from "./schema.ts";
+import { KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES, KNOWLEDGE_EDGES_DDL, KNOWLEDGE_EDGES_INDEXES } from "./schema.ts";
 import type { NewKnowledgeEvent } from "./types.ts";
 
 // The bench queries tasks + executions + iteration_memories tables that
@@ -194,5 +194,74 @@ describe("runBench()", () => {
       expect(rpt.tokens.cacheHitRate).toBe(0);
       expect(rpt.tokens.cacheSampleSize).toBe(1);
     });
+  });
+});
+
+// §8 — the metric the doc says to own, because no tool in the category has it.
+describe("cross-actor governance rate", () => {
+  function dbWithEdges() {
+    const db = freshDb();
+    db.exec(KNOWLEDGE_EDGES_DDL);
+    for (const s of KNOWLEDGE_EDGES_INDEXES) db.exec(s);
+    return db;
+  }
+  const artifact = (taskId: string, actorId: string, paths: string[]) => ev({
+    type: "artifact_summary", taskId, actorId, actorName: actorId,
+    subject: `done ${taskId}`, body: `b-${taskId}`, paths, confidence: "observed",
+  });
+
+  test("counts a task that inherited ANOTHER actor's fact on a file it modified", () => {
+    const db = dbWithEdges();
+    seedTask(db, "t1", "done");
+    // Sarah's ruling on the file, from earlier work.
+    append(db, ev({ actorId: "sarah", actorName: "Sarah", subject: "sha256 only", paths: ["src/auth.ts"] }));
+    // t1 is executed by a different actor and touches that exact file.
+    append(db, artifact("t1", "claude-code", ["src/auth.ts"]));
+
+    const rpt = runBench(db);
+    expect(rpt.knowledge.crossActorSampleSize).toBe(1);
+    expect(rpt.knowledge.crossActorGovernanceRate).toBe(1);
+  });
+
+  test("a task governed only by its OWN actor's facts does not count", () => {
+    // This is what separates the metric from contextReuseRate: presence is not
+    // relevance, and your own notes are not a shared brain.
+    const db = dbWithEdges();
+    seedTask(db, "t1", "done");
+    append(db, ev({ actorId: "claude-code", actorName: "Claude", subject: "self note", paths: ["src/auth.ts"] }));
+    append(db, artifact("t1", "claude-code", ["src/auth.ts"]));
+    expect(runBench(db).knowledge.crossActorGovernanceRate).toBe(0);
+  });
+
+  test("a fact on a file the task did NOT modify does not count", () => {
+    // Clause (b): the fact has to apply to code the task actually touched.
+    const db = dbWithEdges();
+    seedTask(db, "t1", "done");
+    append(db, ev({ actorId: "sarah", actorName: "Sarah", subject: "elsewhere", paths: ["src/other.ts"] }));
+    append(db, artifact("t1", "claude-code", ["src/auth.ts"]));
+    expect(runBench(db).knowledge.crossActorGovernanceRate).toBe(0);
+  });
+
+  test("null — not 0 — when no task recorded modified files", () => {
+    const db = dbWithEdges();
+    seedTask(db, "t1", "done");
+    const rpt = runBench(db);
+    expect(rpt.knowledge.crossActorGovernanceRate).toBeNull();
+    expect(rpt.knowledge.crossActorSampleSize).toBe(0);
+  });
+
+  test("a module-scoped ruling reaches a file the task modified inside it", () => {
+    const db = dbWithEdges();
+    seedTask(db, "t1", "done");
+    append(db, ev({ actorId: "nish", actorName: "Nish", subject: "module rule", paths: ["packages/core"] }));
+    append(db, artifact("t1", "claude-code", ["packages/core/src/deep/file.ts"]));
+    expect(runBench(db).knowledge.crossActorGovernanceRate).toBe(1);
+  });
+
+  test("degrades to null when the edges table is absent", () => {
+    const db = freshDb();
+    seedTask(db, "t1", "done");
+    append(db, artifact("t1", "claude-code", ["src/auth.ts"]));
+    expect(runBench(db).knowledge.crossActorGovernanceRate).toBeNull();
   });
 });

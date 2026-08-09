@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { PRICING, costForTier } from "./pricing.ts";
+import { PRICING, costForTier, costForTierCacheAware } from "./pricing.ts";
 
 describe("pricing — §4.6", () => {
   test("every tier has an entry", () => {
@@ -32,5 +32,32 @@ describe("pricing — §4.6", () => {
   test("routing haiku vs sonnet on same volume — haiku is cheaper", () => {
     const same = 500_000;
     expect(costForTier("haiku", same, same)).toBeLessThan(costForTier("sonnet", same, same));
+  });
+});
+
+describe("cache-aware cost", () => {
+  test("a cache read bills at 0.1x, a cache write at 1.25x", () => {
+    const full = costForTierCacheAware("sonnet", { uncachedInputTokens: 1_000_000, outputTokens: 0 });
+    const cached = costForTierCacheAware("sonnet", { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000 });
+    const written = costForTierCacheAware("sonnet", { uncachedInputTokens: 0, outputTokens: 0, cacheCreationTokens: 1_000_000 });
+    expect(cached).toBeCloseTo(full * 0.10, 8);
+    expect(written).toBeCloseTo(full * 1.25, 8);
+  });
+
+  test("a cache-heavy run costs far less than the naive calculation", () => {
+    // 250 uncached + 800 cached is the shape §4.4's band structure produces.
+    // Billing all 1050 at full rate overstates by ~3x and would make the
+    // prompt work look like a regression.
+    const naive = costForTier("sonnet", 1050, 90);
+    const real = costForTierCacheAware("sonnet", {
+      uncachedInputTokens: 250, outputTokens: 90, cacheReadTokens: 800,
+    });
+    expect(real).toBeLessThan(naive);
+    expect(naive / real).toBeGreaterThan(1.5);
+  });
+
+  test("with no cache data it matches the plain calculation", () => {
+    expect(costForTierCacheAware("opus", { uncachedInputTokens: 500, outputTokens: 200 }))
+      .toBeCloseTo(costForTier("opus", 500, 200), 10);
   });
 });
