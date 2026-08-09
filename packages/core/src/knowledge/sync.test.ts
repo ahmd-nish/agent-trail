@@ -5,7 +5,7 @@ import {
   KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES,
 } from "./schema.ts";
 import { append } from "./store.ts";
-import { applyIncoming, envelopeCursor, pendingPush, syncOnce } from "./sync.ts";
+import { applyIncoming, envelopeCursor, localIdentities, pendingPush, syncOnce } from "./sync.ts";
 import type { NewKnowledgeEvent } from "./types.ts";
 
 function db2(): Database {
@@ -127,5 +127,59 @@ describe("§4.6 sync internals", () => {
       ) as unknown as typeof fetch,
     });
     expect(res.hasMore).toBe(true);
+  });
+
+  test("push reads the LOCAL identity, not the remote workspace", async () => {
+    // Events are emitted with workspace_id='local' — a board has no idea which
+    // relay workspace it will belong to. Reading with the REMOTE workspace id
+    // matched zero rows and reported a cheerful "pushed 0" forever. This is
+    // that bug, caught end-to-end the first time the stack ran for real.
+    const db = db2();
+    append(db, ev({ workspaceId: "local", projectId: "myrepo", subject: "emitted locally" }));
+
+    let pushedCount = 0;
+    const res = await syncOnce(db, {
+      remote: "http://relay.test",
+      workspaceId: "acme",          // remote workspace
+      projectId: "myrepo",
+      localWorkspaceId: "local",    // what actually exists on disk
+      localProjectId: "myrepo",
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        if (!String(url).includes("?")) {
+          pushedCount = (JSON.parse(String(init?.body)).events as unknown[]).length;
+          return new Response(JSON.stringify({ inserted: { events: 1, edges: 0 }, rejected: 0 }));
+        }
+        return new Response(JSON.stringify({ events: [], edges: [], cursor: null }));
+      }) as unknown as typeof fetch,
+    });
+    expect(pushedCount).toBe(1);
+    expect(res.pushed.events).toBe(1);
+  });
+
+  test("localIdentities explains an empty push instead of leaving it silent", () => {
+    const db = db2();
+    append(db, ev({ workspaceId: "local", projectId: "myrepo", subject: "a" }));
+    append(db, ev({ workspaceId: "acme", projectId: "other", subject: "b" }));
+    const ids = localIdentities(db);
+    // A caller can now say "you asked for X but this log holds Y" rather than
+    // reporting a successful no-op.
+    expect(ids).toContainEqual({ workspaceId: "local", projectId: "myrepo", events: 1 });
+    expect(ids).toContainEqual({ workspaceId: "acme", projectId: "other", events: 1 });
+  });
+
+  test("a client with no edges table still applies incoming events", () => {
+    // The CLI used to bootstrap only the events table, so a fresh teammate
+    // accepted events and silently dropped every edge — leaving them holding
+    // knowledge they could not resolve by file.
+    const eventsOnly = new Database(":memory:");
+    eventsOnly.exec(KNOWLEDGE_EVENTS_DDL);
+    for (const q of KNOWLEDGE_EVENTS_INDEXES) eventsOnly.exec(q);
+
+    const src = db2();
+    append(src, ev({ subject: "survives a partial schema", paths: ["a.ts"] }));
+    const envelope = pendingPush(src, { workspaceId: "w", projectId: "p" });
+    const applied = applyIncoming(eventsOnly, envelope);
+    expect(applied.events).toBe(1);
+    expect(applied.edges).toBe(0);   // dropped, but the event is not lost
   });
 });

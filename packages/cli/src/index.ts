@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { addNote, contextDir, ensureContextDir } from "../../core/src/context/store.ts";
 import { exportToFile, hydrateFromFile, readStateFile, statePath } from "../../core/src/context/sync.ts";
 import { resolveDbPath, resolveProjectRoot } from "../../core/src/storage/paths.ts";
@@ -752,6 +752,8 @@ async function cmdKnowledge(args: string[]) {
     projectAgentsMd, projectConstitutionMd,
     KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES,
     KNOWLEDGE_EVENTS_FTS, KNOWLEDGE_EVENTS_FTS_TRIGGERS,
+    KNOWLEDGE_EDGES_DDL, KNOWLEDGE_EDGES_INDEXES,
+    SYNC_STATE_DDL,
   } = await import("../../core/src/knowledge/index.ts");
   void _append; // reserved for future `knowledge add` subcommand
   const root = resolveProjectRoot();
@@ -763,6 +765,14 @@ async function cmdKnowledge(args: string[]) {
   for (const s of KNOWLEDGE_EVENTS_INDEXES) db.exec(s);
   db.exec(KNOWLEDGE_EVENTS_FTS);
   for (const s of KNOWLEDGE_EVENTS_FTS_TRIGGERS) db.exec(s);
+  // §J edges and §4.6 sync state belong to the same bootstrap. Without the
+  // edges table a CLI-created client accepts synced EVENTS but silently drops
+  // every edge — and edges are what knowledgeGoverning() joins on, so the
+  // teammate ends up holding knowledge they cannot resolve by file. That is
+  // the multiplayer payoff failing quietly, which is worse than failing loudly.
+  db.exec(KNOWLEDGE_EDGES_DDL);
+  for (const s of KNOWLEDGE_EDGES_INDEXES) db.exec(s);
+  db.exec(SYNC_STATE_DDL);
 
   const fs = await import("node:fs");
   const path = await import("node:path");
@@ -906,17 +916,23 @@ async function cmdKnowledge(args: string[]) {
         // §4.6 — push then pull against a relay. Append-only means there is
         // never a conflict to resolve; offline just means the cursors do not
         // advance and the next run sends the same batch.
-        const { syncOnce, getSyncState } = await import("../../core/src/knowledge/sync.ts");
+        const { syncOnce, getSyncState, localIdentities } = await import("../../core/src/knowledge/sync.ts");
         const remote = flagValue(args, "--remote") ?? process.env["AGENT_TRAIL_RELAY_URL"];
         if (!remote) {
           console.error(`${c.red("✗")} usage: agent-trail knowledge sync --remote <url> [--workspace <id>] [--project <id>]`);
           console.error(c.dim("  or set AGENT_TRAIL_RELAY_URL. Token via --token or AGENT_TRAIL_RELAY_TOKEN."));
           process.exit(2);
         }
+        // Events are emitted with workspace_id='local' and project_id=<repo
+        // basename>, so the LOCAL read identity defaults to that rather than to
+        // the remote workspace — otherwise push matches zero rows.
+        const projectId = flagValue(args, "--project") ?? basename(process.cwd());
         const res = await syncOnce(db, {
           remote,
           workspaceId: flagValue(args, "--workspace") ?? "local",
-          projectId: flagValue(args, "--project") ?? "local",
+          projectId,
+          localWorkspaceId: flagValue(args, "--local-workspace") ?? "local",
+          localProjectId: flagValue(args, "--local-project") ?? projectId,
           token: flagValue(args, "--token") ?? process.env["AGENT_TRAIL_RELAY_TOKEN"],
           localOnly: args.includes("--local-only"),
         });
@@ -928,10 +944,27 @@ async function cmdKnowledge(args: string[]) {
         }
         console.log(`${c.green("+")} pushed ${res.pushed.events} event(s) / ${res.pushed.edges} edge(s) · pulled ${res.pulled.events} / ${res.pulled.edges}`);
         if (res.cursor) console.log(c.dim(`  cursor ${res.cursor}`));
+        if (res.hasMore) console.log(c.dim("  more remains — run sync again to continue"));
+
+        // A push of 0 when the log is NOT empty almost always means the local
+        // identity does not match what was asked for. Saying so beats letting
+        // a silent no-op look like success.
+        if (res.pushed.events === 0) {
+          const ids = localIdentities(db);
+          const total = ids.reduce((a, i) => a + i.events, 0);
+          const matched = ids.find((i) => i.workspaceId === (flagValue(args, "--local-workspace") ?? "local") && i.projectId === (flagValue(args, "--local-project") ?? projectId));
+          if (total > 0 && !matched) {
+            console.log("");
+            console.log(`${c.amber("!")} nothing matched workspace=${c.bold(flagValue(args, "--local-workspace") ?? "local")} project=${c.bold(flagValue(args, "--local-project") ?? projectId)}`);
+            console.log(c.dim("  this log actually contains:"));
+            for (const i of ids) console.log(c.dim(`    workspace=${i.workspaceId} project=${i.projectId} — ${i.events} event(s)`));
+            console.log(c.dim("  re-run with --local-project <name> (and --local-workspace if needed)."));
+          }
+        }
         return;
       }
       default:
-        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate\n  ${c.bold("sync")} --remote <url>               Push/pull the event log against a relay (§4.6)`);
+        console.log(`${c.bold("agent-trail knowledge")}\n\nUsage:\n  ${c.bold("backfill")}                        Sweep .agent-trail/context/*.md into the event log\n  ${c.bold("ls")} [--type <t>] [--limit <n>]    List active events\n  ${c.bold("fold")} [--cap <chars>]              Preview the constitution projection\n  ${c.bold("export")} [--dir <path>]            Dump JSONL + AGENTS.md + constitution.md\n  ${c.bold("import")} <events.jsonl>            Replay from a JSONL dump (idempotent)\n  ${c.bold("bench")} [--days <n>] [--json]      Report tokens, cache-hit, context-reuse, risk coverage\n  ${c.bold("revalidate")} [--quiet]              Recheck capability contracts against the working tree (§4.2e)\n  ${c.bold("install-hook")} [--force]           Install the post-merge hook that warms revalidate\n  ${c.bold("sync")} --remote <url>               Push/pull the event log against a relay (§4.6)\n       [--project <id>] [--local-project <id>] [--token <t>] [--local-only]`);
         process.exit(sub ? 1 : 0);
     }
   } finally {

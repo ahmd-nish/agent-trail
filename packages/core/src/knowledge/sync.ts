@@ -231,8 +231,25 @@ export function envelopeCursor(events: Array<{ id: string }>, edges: Array<{ id:
 
 export interface SyncOptions {
   remote: string;
+  /** REMOTE identity — the workspace this relay account belongs to. Note the
+   *  relay re-derives this from the token regardless; it is sent for clarity
+   *  and used to tag pull requests. */
   workspaceId: string;
   projectId: string;
+  /**
+   * LOCAL identity — what to read out of this machine's log.
+   *
+   * These exist because events are emitted with `workspace_id = 'local'`: a
+   * board has no idea which relay workspace it will eventually belong to. If
+   * push read using the REMOTE workspace id, it would match zero rows and
+   * report a cheerful "pushed 0" forever — which is exactly what happened the
+   * first time this stack ran end-to-end.
+   *
+   * Default is the remote id (least surprising for a caller whose rows already
+   * carry it); the CLI passes "local" explicitly.
+   */
+  localWorkspaceId?: string;
+  localProjectId?: string;
   token?: string;
   /** §5.2 trust — when true, nothing leaves this machine. Checked FIRST, before
    *  any read of the log, so a local-only project cannot leak through a bug
@@ -261,9 +278,14 @@ export async function syncOnce(db: Database, opts: SyncOptions): Promise<SyncRes
 
   // ── Push ────────────────────────────────────────────────────────────────
   const batchLimit = opts.batchLimit ?? 500;
+  // Defaults to the remote workspace — least surprising for a library caller
+  // whose rows already carry it. The CLI passes "local" explicitly, because it
+  // knows locally-emitted events are always stamped that way.
+  const localWorkspaceId = opts.localWorkspaceId ?? opts.workspaceId;
+  const localProjectId = opts.localProjectId ?? opts.projectId;
   const { events, edges } = pendingPush(db, {
-    workspaceId: opts.workspaceId,
-    projectId: opts.projectId,
+    workspaceId: localWorkspaceId,
+    projectId: localProjectId,
     sinceEvent: state?.pushCursorEvent ?? null,
     sinceEdge: state?.pushCursorEdge ?? null,
     limit: batchLimit,
@@ -317,4 +339,23 @@ export async function syncOnce(db: Database, opts: SyncOptions): Promise<SyncRes
   }
 
   return result;
+}
+
+
+/**
+ * Distinct (workspace, project) pairs present in the local log.
+ *
+ * Exists so a caller can turn a bewildering "pushed 0" into an actionable
+ * message. A silent no-op that looks like success is worse than an error.
+ */
+export function localIdentities(db: Database): Array<{ workspaceId: string; projectId: string; events: number }> {
+  try {
+    return (db.query(
+      `SELECT workspace_id, project_id, COUNT(*) AS n FROM knowledge_events
+        GROUP BY workspace_id, project_id ORDER BY n DESC`,
+    ).all() as Array<{ workspace_id: string; project_id: string; n: number }>)
+      .map((r) => ({ workspaceId: r.workspace_id, projectId: r.project_id, events: r.n }));
+  } catch {
+    return [];
+  }
 }
