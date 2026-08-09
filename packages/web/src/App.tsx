@@ -13,6 +13,7 @@ import { DagView } from "./components/DagView.tsx";
 import { BoardSettings } from "./components/BoardSettings.tsx";
 import { DevServerPill } from "./components/DevServerPill.tsx";
 import { PlanReviewBanner } from "./components/PlanReviewBanner.tsx";
+import { KnowledgeGraph } from "./components/KnowledgeGraph.tsx";
 import { SettingsPopover } from "./components/SettingsPopover.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ToastProvider } from "./components/Toast.tsx";
@@ -25,7 +26,7 @@ import { CostOdometer } from "./components/CostOdometer.tsx";
 import { Scout, type ScoutBeat } from "./components/Scout.tsx";
 import { useScoutQuips } from "./lib/useScoutQuips.ts";
 
-type View = "board" | "dag" | "epics" | "dashboard";
+type View = "board" | "dag" | "epics" | "dashboard" | "graph";
 type LaunchState = "idle" | "launching" | "running";
 
 export function App() {
@@ -33,7 +34,15 @@ export function App() {
   const [activeBoardId, setActiveBoardId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [view, setView] = useState<View>("board");
+  // Deep-linkable view (?view=graph). Lets you share "look at the knowledge
+  // graph" as a URL instead of "click the fifth tab", and makes the view
+  // reachable by anything that cannot click — screenshots, docs, demos.
+  const [view, setView] = useState<View>(() => {
+    const v = new URLSearchParams(window.location.search).get("view");
+    return (["board", "dag", "epics", "dashboard", "graph"] as const).includes(v as View)
+      ? (v as View)
+      : "board";
+  });
   const [newBoardName, setNewBoardName] = useState("");
   const [creatingBoard, setCreatingBoard] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -511,6 +520,7 @@ export function App() {
               ["dag", "dag"],
               ["epics", "epics"],
               ["dashboard", "dash"],
+              ["graph", "graph"],
             ] as [View, string][]).map(([v, label]) => (
               <button
                 key={v}
@@ -541,7 +551,12 @@ export function App() {
             }
           />
         )}
-        {!activeBoardId ? (
+        {/* The knowledge graph spans the whole project, not one board — it must
+            render even before any board exists, which is exactly when a new
+            teammate most wants to see what the team already knows. */}
+        {view === "graph" ? (
+          <KnowledgeGraph />
+        ) : !activeBoardId ? (
           <EmptyBoardState
             onPlanned={handlePlanResult}
             onOpenPlan={() => setShowPlanModal(true)}

@@ -5,6 +5,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { boardsRouter } from "./routes/boards.ts";
 import { relayRouter } from "./routes/relay.ts";
+import { knowledgeGraphRouter } from "./routes/knowledge-graph.ts";
 import { tasksRouter } from "./routes/tasks.ts";
 import { executionsRouter } from "./routes/executions.ts";
 import { decisionsRouter } from "./routes/decisions.ts";
@@ -84,6 +85,7 @@ app.route("/api/boards", boardsRouter);
 // protocol surface consumed by other agent-trail installs rather than by the
 // local UI. Disabled unless AGENT_TRAIL_RELAY_TOKEN is set.
 app.route("/", relayRouter);
+app.route("/api", knowledgeGraphRouter);
 app.route("/api", tasksRouter);
 app.route("/api", executionsRouter);
 app.route("/api", decisionsRouter);
