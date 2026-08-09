@@ -33,7 +33,33 @@ Running one coding agent in a terminal is easy. Running *several*, on real work,
 - **Crash-resume + replay** — every run recorded; restart mid-stream, or replay a past run from a URL
 - **Auto-PR + commit agent** — a green run produces a properly-scoped commit and opens a PR
 
-**Team context (local today, multiplayer next)**
+**Shared knowledge layer — the team brain**
+
+The part nobody else has. Every other team-memory tool asks people to *write down* what they
+know; agent-trail already watches them do the work, so the knowledge writes itself and every
+teammate's agent inherits it. See [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md) to run it for a team.
+
+- **It writes itself** — decisions, failed attempts, gotchas, steers and capability contracts
+  become typed events as work happens. Nobody types a wiki page.
+- **Capability contracts** — a finished task emits the exact signatures it produced, so the next
+  task calls the API without opening a single file
+- **Governance gate** — before an agent touches a file, it's told what already failed there:
+  *"Sarah's agent tried a null-guard here 3 days ago; verify_tests failed the same way"*
+- **Knowledge graph (§J)** — knowledge joined to the code it governs. Ask *"what governs the
+  files I'm about to change"*, or *"what breaks if I change `createSession`"* — the blast radius
+  through callers, crossed with the rulings that apply to them
+- **Contracts stay honest** — validity is derived from git, so a signature changed by a rebase,
+  a hotfix, or a teammate on another tool is reported as drifted and re-derived, never trusted stale
+- **Visual explorer** — the `graph` tab: pan, zoom, filter by type or author, search, and focus on
+  any node's neighbourhood
+- **Cross-machine sync** — an append-only log with a cursor. Answer a decision on your laptop;
+  your teammate's next spawn inherits it, with no git push
+- **Workspaces, roles, tokens** — per-user credentials scoped to one workspace (viewer / member /
+  admin / owner), stored hashed
+- **Temporal validity + attribution** — corrections supersede rather than overwrite, so you can
+  always see who changed their mind and when
+
+**Team context**
 - **Team constitution** — `.agent-trail/context/` markdown store; agent inherits it on every spawn
 - **Context orchestrator** — per-task memories + L1 context packs derived from execution history
 - **Iteration memory** — every verify_tests failure produces a summary; the *next* attempt sees the last N tries
@@ -88,6 +114,25 @@ bun cli sync export | import | status                # export/import board + tas
 bun cli library add | new | ls | rm                  # manage the team agent library
 bun cli deploy --board <id> --target production      # ticket-gated deploy with healthcheck + auto-rollback
 bun cli status                                       # all boards + task counts
+```
+
+**Shared knowledge layer**
+
+```bash
+bun cli knowledge ls                                 # active knowledge events (decisions, gotchas, contracts)
+bun cli knowledge fold                               # preview the constitution projection
+bun cli knowledge backfill                           # sweep existing .agent-trail/context/*.md into the log
+bun cli knowledge revalidate                         # recheck capability contracts against the working tree
+bun cli knowledge install-hook                       # post-merge hook that warms revalidation (optional)
+bun cli knowledge bench                              # tokens, cache-hit, cross-actor governance rate
+bun cli knowledge export --dir ./out                 # JSONL + AGENTS.md + constitution.md
+bun cli knowledge sync --remote https://relay --token at_...   # push/pull against a team relay
+
+# On the relay host — identity for a team
+bun cli workspace create acme "Acme"
+bun cli workspace member add acme github:12345 Sarah --role member
+bun cli workspace token create acme github:12345     # prints the token once
+bun cli workspace token revoke <tokenId>
 ```
 
 ## Architecture
@@ -175,7 +220,9 @@ Or add to `.mcp.json`:
 
 **Shipped in v1.x:** everything above — the parallel board, TDD gate, decision tickets, live feed, context orchestrator, agent library, model router, cost budgets, board loop, deploy agent, iteration memory, thrash detection, crash-resume, replay, auto-PR, headless CI.
 
-**Coming next — the shared brain:** a real team-context layer. Two people, one board, one running agent. Anyone can drop in, watch, redirect, answer questions, hand off. Every one of those interactions becomes a knowledge event visible to the next spawn — anyone's spawn. See [`docs/knowledgelayer.md`](docs/knowledgelayer.md) for the architecture, and [`GOOD_FIRST_ISSUES.md`](.github/GOOD_FIRST_ISSUES.md) for scoped starter tasks.
+**Shipped since — the shared brain:** the knowledge layer is real. Work produces typed knowledge events; contracts, a governance gate and a knowledge graph are built on top; a relay syncs the asserted half between machines with per-user workspace credentials. Architecture in [`docs/knowledgelayer.md`](docs/knowledgelayer.md) and [`docs/knowledgelayer-v2.md`](docs/knowledgelayer-v2.md); setup in [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md).
+
+**Coming next:** live presence and session join — two people watching one running agent, redirecting it together, with a shared decision inbox. The sync protocol underneath it is done; the UI is not. Deferred work and its reasoning lives in [`docs/backlog.md`](docs/backlog.md), and [`GOOD_FIRST_ISSUES.md`](.github/GOOD_FIRST_ISSUES.md) has scoped starter tasks.
 
 ## Development
 
