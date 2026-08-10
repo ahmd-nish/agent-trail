@@ -585,7 +585,22 @@ function reconcileOrphanedRuns(db: Database): void {
     .query("SELECT id, task_id FROM executions WHERE status IN ('running','pending') AND finished_at IS NULL")
     .all() as { id: string; task_id: string }[];
 
-  if (orphans.length === 0) return;
+  // A task can be `in_progress` with NO execution row at all: the board runner
+  // marks it in_progress and puts it on an IN-MEMORY queue, and the row is only
+  // written when it actually spawns. Kill the process in that window and the
+  // task is stranded — no execution to reconcile, so the old early-return here
+  // left it `in_progress` forever. Two such zombies had been sitting in this
+  // database since May and July.
+  //
+  // Nothing can be legitimately mid-flight at startup, so any remaining
+  // in_progress task is by definition orphaned.
+  const stranded = db
+    .query(`SELECT id FROM tasks WHERE status = 'in_progress'
+              AND id NOT IN (SELECT task_id FROM executions
+                              WHERE status IN ('running','pending') AND finished_at IS NULL)`)
+    .all() as { id: string }[];
+
+  if (orphans.length === 0 && stranded.length === 0) return;
 
   db.exec("BEGIN");
   try {
@@ -599,8 +614,18 @@ function reconcileOrphanedRuns(db: Database): void {
       failExec.run(now, msg, o.id);
       resetTask.run(msg, now, o.task_id);
     }
+    // Stranded queued tasks get their own message — "in flight" would be a lie,
+    // and the distinction tells the user whether work was lost or merely never
+    // begun.
+    const queuedMsg = "Queued when the server stopped — never started. Re-run when ready.";
+    for (const t of stranded) {
+      resetTask.run(queuedMsg, now, t.id);
+    }
     db.exec("COMMIT");
-    console.log(`[db] reconciled ${orphans.length} orphaned execution(s) from previous run`);
+    const parts: string[] = [];
+    if (orphans.length) parts.push(`${orphans.length} orphaned execution(s)`);
+    if (stranded.length) parts.push(`${stranded.length} stranded queued task(s)`);
+    console.log(`[db] reconciled ${parts.join(" + ")} from previous run`);
   } catch (err) {
     db.exec("ROLLBACK");
     console.error("[db] reconcile failed:", err);
