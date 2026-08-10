@@ -83,6 +83,15 @@ teammate's agent inherits it. See [`docs/TEAM_SETUP.md`](docs/TEAM_SETUP.md) to 
 ## Quickstart
 
 ```bash
+npx inventarium             # launch the board in the current repo
+npx inventarium --demo      # replay mode against bundled fixtures, no `claude` needed
+```
+
+Open the printed URL, create a board, paste a PRD (or use `examples/sample-prd.md`), and click **▶ Run** on any task.
+
+Working on Inventarium itself?
+
+```bash
 git clone https://github.com/ahmd-nish/inventarium.git
 cd inventarium
 bun install
@@ -91,9 +100,7 @@ bun install
 bun start                   # http://localhost:3002 (API) + http://localhost:5173 (web)
 ```
 
-Open http://localhost:5173, create a board, paste a PRD (or use `examples/sample-prd.md`), and click **▶ Run** on any task.
-
-Prefer the CLI-only path? `bun cli --demo` opens the board in replay mode against the bundled fixtures — no `claude` install required.
+Then open http://localhost:5173.
 
 ## CLI
 

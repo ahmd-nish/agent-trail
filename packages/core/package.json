@@ -1,6 +1,6 @@
 {
   "name": "@inventarium/core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "Core primitives for inventarium: DAG planner, Claude Code adapter, MCP servers, test runner, context store, model router.",
   "repository": {

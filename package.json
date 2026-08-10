@@ -1,10 +1,12 @@
 {
   "name": "inventarium-workspace",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Workspace root for inventarium — the kanban board where your team's AI coding agents share a brain. Publishable packages live in packages/*.",
+  "description": "Workspace root for inventarium \u2014 the kanban board where your team's AI coding agents share a brain. Publishable packages live in packages/*.",
   "license": "MIT",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun --filter '*' dev",
     "dev:server": "lsof -ti:3002 | xargs -r kill -9 2>/dev/null; sleep 0.3; bun --watch packages/server/src/index.ts",
@@ -27,5 +29,7 @@
     "@types/bun": "latest",
     "typescript": "^5.6.0"
   },
-  "engines": { "bun": ">=1.1.0" }
+  "engines": {
+    "bun": ">=1.1.0"
+  }
 }

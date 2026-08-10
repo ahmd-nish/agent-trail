@@ -1,6 +1,6 @@
 {
   "name": "inventarium",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "inventarium CLI \u2014 the kanban board where your team's AI coding agents share a brain.",
   "repository": {

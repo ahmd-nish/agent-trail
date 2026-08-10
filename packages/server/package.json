@@ -1,6 +1,6 @@
 {
   "name": "@inventarium/server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "description": "Hono API + execution manager + SSE bus for inventarium.",
   "repository": {

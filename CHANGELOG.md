@@ -2,6 +2,72 @@
 
 All notable changes to inventarium will land here. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [semver](https://semver.org/).
 
+## [1.1.0] — 2026-08-10
+
+Renamed from **agent-trail** to **Inventarium**, and shipped the shared knowledge layer:
+work now produces team knowledge automatically, and that knowledge syncs between machines.
+
+### Added — the shared knowledge layer
+- **Typed, append-only knowledge log** — decisions, gotchas, failed attempts, steers, fixes and
+  capability contracts are emitted as work happens. Nobody writes a wiki page. Corrections
+  supersede rather than overwrite, so attribution and temporal validity survive.
+- **Capability contracts (§4.2b)** — a finished task emits the exact signatures it produced, so
+  the next task calls the API without opening a file. Extraction is deterministic (0% blind-spot
+  rate on this repo).
+- **Governance gate (§4.5)** — before an agent touches a file it is told what already failed
+  there, across tasks and across teammates.
+- **The join, §J** — knowledge joined to the code it governs. Q1 "what governs these files",
+  Q2 blast radius through callers crossed with the rulings that apply, Q3 provenance
+  (file → contract → decision → person).
+- **Validity oracle (§4.2e)** — contracts anchored to a commit; staleness is *derived* from git,
+  never stored. A signature changed by a rebase, hotfix or another tool is reported drifted and
+  re-derived rather than trusted.
+- **Hybrid retrieval (§6)** — lexical (FTS5) and structural (§J edges) seeds scored together and
+  rendered once, so a fact reached both ways ranks above one reached either way.
+- **Three-band prompt (§4.4)** — stable org/project prefix before per-spawn content, so two tasks
+  in a project share a byte-identical prefix. Cache-token accounting split out (migration v25) to
+  make the effect measurable.
+- **Relay + cursor sync (§4.6)** — `POST/GET /v1/events` plus an SSE tail. Answer a decision on one
+  machine; a teammate's next spawn inherits it with no git push. Append-only means no conflict
+  resolution and no CRDT.
+- **Workspaces, roles and tokens (§5.1)** — per-user credentials scoped to one workspace
+  (viewer/member/admin/owner), stored hashed. Workspace scope is derived from the credential,
+  never read from the request.
+- **Visual graph explorer** — a `graph` tab: pan, zoom, filter by type or author, search, and focus
+  on any node's neighbourhood. Canvas force layout, no new dependencies.
+- **Cross-actor governance rate (§8)** — the metric no tool in the category reports: the fraction
+  of tasks whose context included a fact authored by someone else *and* attached to a file the
+  task actually modified.
+- **CLI** — `inventarium knowledge ls|fold|backfill|revalidate|install-hook|bench|export|sync` and
+  `inventarium workspace create|ls|member|token`.
+
+### Changed
+- **Renamed to Inventarium.** Packages are now `inventarium` (CLI), `@inventarium/core`,
+  `@inventarium/server`. On-disk names migrate automatically along the chain
+  `vibe-board → agent-trail → inventarium` for the database and both state directories; env vars
+  read `INVENTARIUM_*` and fall back to `AGENT_TRAIL_*` with a one-time warning.
+- Cost is now cache-aware — a cache read bills at 0.1x, a write at 1.25x. The previous figure
+  overstated cache-heavy runs by more than 1.5x.
+
+### Fixed
+- **Thrash detection missed genuine repeats (~1 in 4).** The comparison tail was sliced before
+  substitutions, so identical failures whose durations differed in character count compared
+  unequal — the loop kept burning tokens on a fix that could not converge.
+- **Optimistic locking silently lost concurrent writes.** `tasks.updated_at` doubled as the ETag at
+  millisecond resolution, so two writes in the same millisecond were indistinguishable and the
+  stale-write check passed.
+- **Every knowledge event carried an empty file footprint**, which silently disabled the
+  governance gate — it matches by path.
+- Contracts embedded whole function bodies instead of signatures; the extractor missed
+  re-exports, `export default` and multi-line union types (blind-spot rate 6.5% → 0%).
+- Sync reported "pushed 0" as success when local and remote workspace identity differed.
+- A CLI-created teammate accepted synced events but silently dropped every edge.
+
+### Notes
+Every one of the fixes above was invisible to a fully green unit suite and surfaced within
+minutes of running the real product. `real-stack-e2e.test.ts` now drives the actual CLI and
+server as processes to cover that seam.
+
 ## [Unreleased]
 
 ### Added — Phase 5 loop engineering (§5.2, §5.5, §5.6)
