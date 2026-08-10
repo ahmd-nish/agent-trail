@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { backfillFromContextDir } from "./backfill.ts";
+import { backfillFromContextDir, parseTaskMemory } from "./backfill.ts";
 import { KNOWLEDGE_EVENTS_DDL, KNOWLEDGE_EVENTS_INDEXES } from "./schema.ts";
 import { count, list } from "./store.ts";
 
@@ -102,5 +102,64 @@ _— alice_
       "Do not use CRDT libraries",
       "L0 constitution goes first",
     ]);
+  });
+});
+
+describe("task-memory sweep", () => {
+  const MEM = `# greet(name) helper
+<!-- task-id: 67d6fac7-bb55-46cf-b005-24c17aee96dd -->
+<!-- completed: 2026-07-28T17:15:53.122Z -->
+## Summary
+Add packages/greet.ts exporting greet(name: string): string.
+Met criteria: [0] greet.ts exports greet
+Touched: packages/
+## Files touched
+
+- packages/greet.ts
+- packages/greet.test.ts
+`;
+
+  test("parses title, task id, timestamp, summary and file footprint", () => {
+    const p = parseTaskMemory(MEM)!;
+    expect(p.title).toBe("greet(name) helper");
+    expect(p.taskId).toBe("67d6fac7-bb55-46cf-b005-24c17aee96dd");
+    expect(p.completedAt).toBe("2026-07-28T17:15:53.122Z");
+    expect(p.summary).toContain("greet(name: string)");
+    // The footprint is the point — without paths there are no §J edges.
+    expect(p.paths).toEqual(["packages/greet.ts", "packages/greet.test.ts"]);
+  });
+
+  test("rejects a memory with no title or no summary", () => {
+    expect(parseTaskMemory("no heading here")).toBeNull();
+    expect(parseTaskMemory("# Title only\n")).toBeNull();
+  });
+
+  test("sweeps memories into artifact_summary events that carry paths", () => {
+    const db = freshDb();
+    const root = seedContext({});
+    mkdirSync(join(root, ".inventarium/context/memories"), { recursive: true });
+    writeFileSync(join(root, ".inventarium/context/memories/a.md"), MEM, "utf8");
+
+    const rpt = backfillFromContextDir(db, root);
+    expect(rpt.memoriesInserted).toBe(1);
+
+    const ev = list(db, {})[0]!;
+    expect(ev.type).toBe("artifact_summary");
+    // Written by the executor, so observed — never a human ruling.
+    expect(ev.confidence).toBe("observed");
+    expect(ev.actorKind).toBe("agent");
+    expect(ev.paths).toEqual(["packages/greet.ts", "packages/greet.test.ts"]);
+    expect(ev.validFrom).toBe("2026-07-28T17:15:53.122Z");
+  });
+
+  test("is idempotent — a second sweep inserts nothing", () => {
+    const db = freshDb();
+    const root = seedContext({});
+    mkdirSync(join(root, ".inventarium/context/memories"), { recursive: true });
+    writeFileSync(join(root, ".inventarium/context/memories/a.md"), MEM, "utf8");
+    backfillFromContextDir(db, root);
+    const second = backfillFromContextDir(db, root);
+    expect(second.memoriesInserted).toBe(0);
+    expect(second.memoriesSkipped).toBe(1);
   });
 });

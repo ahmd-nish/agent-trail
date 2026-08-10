@@ -797,6 +797,7 @@ async function cmdKnowledge(args: string[]) {
         for (const f of rpt.filesRead) console.log(`  ${c.dim("read")} ${f}`);
         console.log(`  ${c.green("+")} ${rpt.decisionsInserted} decisions · ${c.dim(String(rpt.decisionsSkipped) + " already present")}`);
         console.log(`  ${c.green("+")} ${rpt.notesInserted} conventions · ${c.dim(String(rpt.notesSkipped) + " already present")}`);
+        console.log(`  ${c.green("+")} ${rpt.memoriesInserted} task memories · ${c.dim(String(rpt.memoriesSkipped) + " already present or unparseable")}`);
         return;
       }
       case "ls": {

@@ -16,6 +16,9 @@ export interface BackfillReport {
   decisionsSkipped: number;
   notesInserted: number;
   notesSkipped: number;
+  /** Per-task memories swept into artifact_summary events. */
+  memoriesInserted: number;
+  memoriesSkipped: number;
   filesRead: string[];
 }
 
@@ -23,6 +26,7 @@ export function backfillFromContextDir(db: Database, root: string): BackfillRepo
   const rpt: BackfillReport = {
     decisionsInserted: 0, decisionsSkipped: 0,
     notesInserted: 0, notesSkipped: 0,
+    memoriesInserted: 0, memoriesSkipped: 0,
     filesRead: [],
   };
 
@@ -94,6 +98,41 @@ export function backfillFromContextDir(db: Database, root: string): BackfillRepo
     }
   }
 
+  // context/memories/*.md — per-task memories written by the context
+  // orchestrator since long before the knowledge layer existed. On this repo
+  // that is 815 files of real history the log would otherwise start without.
+  //
+  // They become `artifact_summary` events, which is what they are: a summary of
+  // what a completed task produced. Crucially they carry the FILE FOOTPRINT, so
+  // append() emits §J edges and the graph is populated rather than a list of
+  // orphaned facts.
+  const memDir = join(dir, "memories");
+  if (existsSync(memDir)) {
+    for (const file of readdirSync(memDir).filter((f) => f.endsWith(".md")).sort()) {
+      const parsed = parseTaskMemory(readFileSync(join(memDir, file), "utf8"));
+      if (!parsed || !isWorthKeeping(parsed)) { rpt.memoriesSkipped++; continue; }
+      const { inserted } = append(db, {
+        ...baseCtx,
+        // Written by the executor, not a human — `observed`, never `ruling`.
+        actorKind: "agent",
+        actorId: "claude-code",
+        actorName: "Claude Code",
+        taskId: parsed.taskId,
+        executionId: null,
+        type: "artifact_summary",
+        scope: parsed.taskId ? `task:${parsed.taskId}` : "project",
+        subject: parsed.title,
+        body: parsed.summary,
+        paths: parsed.paths,
+        confidence: "observed",
+        validFrom: parsed.completedAt,
+        supersedes: null,
+      });
+      if (inserted) rpt.memoriesInserted++; else rpt.memoriesSkipped++;
+    }
+    rpt.filesRead.push(memDir);
+  }
+
   return rpt;
 }
 
@@ -162,4 +201,74 @@ function parseBullets(md: string): ParsedNote[] {
 function extractLabelled(block: string, re: RegExp): string | null {
   const m = block.match(re);
   return m?.[1]?.trim() ?? null;
+}
+
+interface ParsedMemory {
+  title: string;
+  taskId: string | null;
+  completedAt: string | undefined;
+  summary: string;
+  paths: string[];
+}
+
+/**
+ * Parse a task-memory markdown file written by `writeTaskMemory`:
+ *
+ *   # <title>
+ *   <!-- task-id: … -->
+ *   <!-- completed: <iso> -->
+ *   ## Summary
+ *   …
+ *   ## Files touched
+ *   - path
+ *
+ * Returns null for a memory with no usable title or summary — a subject-less
+ * event is noise in every projection that consumes it.
+ */
+export function parseTaskMemory(md: string): ParsedMemory | null {
+  const title = md.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (!title) return null;
+
+  const taskId = md.match(/<!--\s*task-id:\s*([^\s>]+)\s*-->/)?.[1] ?? null;
+  const completedAt = md.match(/<!--\s*completed:\s*([^\s>]+)\s*-->/)?.[1];
+
+  const summary = md.split(/^##\s+Summary\s*$/m)[1]?.split(/^##\s+/m)[0]?.trim() ?? "";
+  if (!summary) return null;
+
+  const filesBlock = md.split(/^##\s+Files touched\s*$/m)[1]?.split(/^##\s+/m)[0] ?? "";
+  const paths = [...new Set(
+    filesBlock.split("\n")
+      .map((l) => l.match(/^\s*[-*]\s+(.+?)\s*$/)?.[1])
+      .filter((v): v is string => !!v && !v.includes(" "))
+      // A trailing-slash entry is a directory; keep it, since §J treats a
+      // directory as a module and the read side expands into it.
+      .map((v) => v.replace(/^`|`$/g, "")),
+  )];
+
+  return { title, taskId, completedAt, summary, paths };
+}
+
+/**
+ * Is this memory worth an event?
+ *
+ * Measured on a real repo: 810 of 815 memories were demo/E2E scaffold whose
+ * summary was literally their own title ("Task 2") with no file footprint.
+ * Sweeping them in produced 815 events with 10 distinct subjects and 8 edges —
+ * a log that is worse than an empty one, because FTS retrieval would surface
+ * "Task 2" ahead of real knowledge and burn Band C budget on nothing.
+ *
+ * The rule: an event must carry information the title does not. Either a file
+ * footprint (which is what makes it joinable in §J at all) or a summary that
+ * says more than the heading.
+ *
+ * Note this is NOT caught by content-hash dedupe: `scope` is `task:<id>`, so
+ * 800 identical summaries hash differently and all insert.
+ */
+function isWorthKeeping(m: ParsedMemory): boolean {
+  if (m.paths.length > 0) return true;
+  const summary = m.summary.replace(/\s+/g, " ").trim();
+  const title = m.title.replace(/\s+/g, " ").trim();
+  if (!summary || summary === title) return false;
+  // A summary that is just the title plus a few characters is still noise.
+  return summary.length > title.length + 24;
 }
