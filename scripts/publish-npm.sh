@@ -1,31 +1,25 @@
 #!/usr/bin/env bash
-# Publishes the three v1.0.0 packages to npm in dependency order.
+# Publishes the `inventarium` CLI to npm.
 #
-# Prereqs:
-#   1. `bunx npm login` (or `npm login`) — must be logged in as a maintainer of @inventarium scope
-#   2. bun 1.3+ installed
+# ONE package, deliberately. core and server import across package boundaries
+# with relative paths, so they are not consumable as standalone libraries — a
+# dependent would hit the same ENOENT the CLI did at 1.1.0. The CLI bundles
+# them instead, which is why it is the only publishable artifact.
 #
-# Order matters: core → server → cli, because CLI depends on both.
-# Run each publish separately so a failure halts the chain.
+# prepublishOnly runs scripts/build-dist.ts, which bundles cli + server +
+# ask-human + runner, copies schema.sql, and builds the web UI.
+#
+# Prereq: an npm credential that can publish (2FA or a granular token with
+# bypass-2fa enabled).
 
 set -euo pipefail
-
 cd "$(dirname "$0")/.."
 
-# dir:published-name — the CLI is unscoped so `npx inventarium` works.
-for entry in "core:@inventarium/core" "server:@inventarium/server" "cli:inventarium"; do
-  dir="${entry%%:*}"; name="${entry##*:}"
-  echo ""
-  echo "==================== $name ===================="
-  ( cd "packages/$dir" && npm publish --access public )
-  echo "✓ $name published"
-done
+( cd packages/cli && npm publish --access public )
 
+VERSION="$(node -p "require('./packages/cli/package.json').version")"
 echo ""
-echo "Done. Verify with:"
-echo "  npm view inventarium"
-echo "  npm view @inventarium/core"
-echo "  npm view @inventarium/server"
+echo "✓ inventarium@$VERSION published"
 echo ""
-echo "Then smoke test on a clean machine (or fresh tmp dir with bun globally installed):"
-echo "  npx inventarium --demo"
+echo "Verify on a machine that has never seen this repo:"
+echo "  npx inventarium@$VERSION --demo"

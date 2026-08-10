@@ -2,7 +2,7 @@
 
 All notable changes to inventarium will land here. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [semver](https://semver.org/).
 
-## [1.1.0] — 2026-08-10
+## [1.1.1] — 2026-08-10
 
 Renamed from **agent-trail** to **Inventarium**, and shipped the shared knowledge layer:
 work now produces team knowledge automatically, and that knowledge syncs between machines.

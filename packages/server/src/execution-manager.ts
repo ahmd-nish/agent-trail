@@ -51,7 +51,7 @@ import { nextTier } from "../../core/src/planner/models.ts";
 import type { ModelTier } from "../../core/src/types/index.ts";
 import { append as appendKnowledge } from "../../core/src/knowledge/store.ts";
 import { extractContract } from "../../core/src/knowledge/contracts.ts";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const MAX_CONCURRENT = 3;
@@ -61,7 +61,10 @@ const REPO_ROOT = resolveProjectRoot();
 const DB_PATH = resolveDbPath(REPO_ROOT);
 // The ask-human MCP entry ships with the server package; resolve it relative
 // to this file so it keeps working when installed under node_modules.
-const ASK_HUMAN_SCRIPT = join(import.meta.dir, "../../core/src/mcp/ask-human.ts");
+const ASK_HUMAN_SCRIPT = [
+  join(import.meta.dir, "ask-human.js"),
+  join(import.meta.dir, "../../core/src/mcp/ask-human.ts"),
+].find(existsSync) ?? join(import.meta.dir, "../../core/src/mcp/ask-human.ts");
 
 interface ExecutionState {
   executionId: string;

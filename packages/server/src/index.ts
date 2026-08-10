@@ -35,7 +35,10 @@ const RUNNER_URL = process.env["INVENTARIUM_RUNNER_URL"] ?? process.env["AGENT_T
 // that lets sandboxes / demos / tests aim state.json at a specific directory
 // independent of where the server was launched from.
 const PROJECT_ROOT = process.env["INVENTARIUM_PROJECT_ROOT"] ?? resolveProjectRoot();
-const RUNNER_ENTRY = join(import.meta.dir, "../../runner/src/index.ts");
+const RUNNER_ENTRY = [
+  join(import.meta.dir, "runner.js"),
+  join(import.meta.dir, "../../runner/src/index.ts"),
+].find(existsSync) ?? join(import.meta.dir, "../../runner/src/index.ts");
 const WEB_DIST_CANDIDATES = [
   join(import.meta.dir, "../../web/dist"),
   join(import.meta.dir, "../web/dist"),

@@ -1,5 +1,6 @@
 node_modules/
 dist/
+packages/cli/web/
 build/
 .DS_Store
 *.log

@@ -7,6 +7,8 @@ import { resolveProjectRoot } from "../../../core/src/storage/paths.ts";
 // package (dev checkout), (3) the CLI package's bundled examples. First match wins.
 const EXAMPLES_CANDIDATES = [
   join(resolveProjectRoot(), "examples"),
+  join(import.meta.dir, "examples"),
+  join(import.meta.dir, "../examples"),
   join(import.meta.dir, "../../../..", "examples"),
   join(import.meta.dir, "../../../cli/examples"),
 ];

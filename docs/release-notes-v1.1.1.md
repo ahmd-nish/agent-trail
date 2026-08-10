@@ -3,9 +3,11 @@
 Formerly `agent-trail`. This release is the reason for the rename: agents no longer just run in parallel — they inherit what the team already learned.
 
 ```bash
-npx inventarium          # launch the board
-npx inventarium --demo   # replay mode against bundled fixtures
+npx inventarium          # launch the board in the current repo
+npx inventarium --demo   # replay mode against bundled fixtures, no `claude` needed
 ```
+
+*(1.1.0 was published broken and is deprecated — it shipped unresolvable `workspace:*` dependencies and cross-package relative imports. Use 1.1.1.)*
 
 ## The shared knowledge layer
 

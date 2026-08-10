@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Board, Task, TaskStatus, Priority, AgentKind, TddPhase, ReviewKind, Guardrail, PermissionMode, TestCase } from "../../core/src/types/index.ts";
 import { DEFAULT_PERMISSION_MODE, DEFAULT_EXECUTION_TIMEOUT_MS } from "../../core/src/types/index.ts";
@@ -15,7 +15,12 @@ import {
 import { SYNC_STATE_DDL } from "../../core/src/knowledge/sync.ts";
 import { WORKSPACE_DDL, WORKSPACE_INDEXES } from "../../core/src/knowledge/workspace.ts";
 
-const schemaPath = join(import.meta.dir, "../../core/src/storage/schema.sql");
+// Runtime asset, so bundling does not inline it: `import.meta.dir` is the
+// bundle's directory in a published install and the package source dir in dev.
+const schemaPath = [
+  join(import.meta.dir, "schema.sql"),
+  join(import.meta.dir, "../../core/src/storage/schema.sql"),
+].find(existsSync) ?? join(import.meta.dir, "../../core/src/storage/schema.sql");
 
 // ─── Migrations ──────────────────────────────────────────────────────────────
 //

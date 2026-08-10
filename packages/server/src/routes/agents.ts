@@ -15,6 +15,8 @@ import { resolveProjectRoot } from "../../../core/src/storage/paths.ts";
 
 const AGENT_CANDIDATES = [
   join(resolveProjectRoot(), ".claude", "agents"),
+  join(import.meta.dir, "agents"),
+  join(import.meta.dir, "../agents"),
   join(import.meta.dir, "../../../..", ".claude", "agents"),
   join(import.meta.dir, "../../../cli/agents"),
 ];

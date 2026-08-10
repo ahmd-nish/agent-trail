@@ -1,6 +1,6 @@
 {
   "name": "inventarium",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "license": "MIT",
   "description": "inventarium CLI \u2014 the kanban board where your team's AI coding agents share a brain.",
   "repository": {
@@ -20,17 +20,15 @@
   ],
   "type": "module",
   "bin": {
-    "inventarium": "./src/index.ts"
+    "inventarium": "./dist/cli.js"
   },
   "files": [
-    "src",
+    "dist",
+    "web/dist",
     "examples",
-    "agents",
-    "!src/**/*.test.ts",
-    "!src/**/*.spec.ts"
+    "agents"
   ],
-  "dependencies": {
-    "@inventarium/core": "workspace:*",
-    "@inventarium/server": "workspace:*"
+  "scripts": {
+    "prepublishOnly": "bun ../../scripts/build-dist.ts"
   }
 }

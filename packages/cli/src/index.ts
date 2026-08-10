@@ -15,10 +15,18 @@ const DEFAULT_PORT = Number(process.env["INVENTARIUM_PORT"] ?? process.env["PORT
 const BASE_URL_FROM_ENV = process.env["INVENTARIUM_URL"] ?? process.env["AGENT_TRAIL_URL"];
 let BASE_URL = BASE_URL_FROM_ENV ?? `http://localhost:${DEFAULT_PORT}`;
 
-// The CLI ships alongside the server package. In the published npm layout the
-// server lives at ../../server; in the workspace it lives at ../../server too.
-// Fall back to a monorepo path for `bun run cli` from repo root.
+// Where to find the server to spawn.
+//
+// PUBLISHED layout comes first: the tarball ships a self-contained
+// `dist/server.js` next to `dist/cli.js`. The workspace paths below only
+// resolve during local development.
+//
+// This ordering is the whole reason `npx inventarium` works. The source
+// imports and spawns across package boundaries (`../../server/src/...`), which
+// exist in the monorepo and do NOT exist in a published tarball — so the
+// published CLI has to run bundles, not source.
 const SERVER_CANDIDATES = [
+  join(import.meta.dir, "server.js"),
   join(import.meta.dir, "../../server/src/index.ts"),
   join(import.meta.dir, "../../../server/src/index.ts"),
 ];
