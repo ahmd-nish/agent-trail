@@ -2,7 +2,7 @@
   "name": "inventarium-workspace",
   "version": "1.1.1",
   "private": true,
-  "description": "Workspace root for inventarium \u2014 the kanban board where your team's AI coding agents share a brain. Publishable packages live in packages/*.",
+  "description": "Workspace root for inventarium — the kanban board where your team's AI coding agents share a brain. Publishable packages live in packages/*.",
   "license": "MIT",
   "workspaces": [
     "packages/*"
@@ -31,5 +31,8 @@
   },
   "engines": {
     "bun": ">=1.1.0"
+  },
+  "dependencies": {
+    "@dnd-kit/utilities": "^3.2.2"
   }
 }
