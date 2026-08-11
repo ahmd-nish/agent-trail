@@ -1,0 +1,50 @@
+[33m181541c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeat/copy-diff-button[m[33m)[m feat: add copy diff button to artifact display
+[33m4ac6d31[m feat: add copy diff button to artifact display
+[33m643a6ae[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m fix: a task queued when the process dies was stranded in_progress forever
+[33mef598b1[m graph explorer: fix the blank canvas, make it feel alive
+[33m365c88d[m backfill task memories — and filter the noise that made it worse
+[33me21925f[m fix packaging so `npx inventarium` actually works — v1.1.1
+[33me81e080[m release: v1.1.0 — Inventarium
+[33mc81defc[m rename: agent-trail → Inventarium
+[33mecfc47e[m docs: the knowledge layer was undocumented for anyone who isn't me
+[33m21f1ea5[m real-stack test: cover the seam every high-severity bug lived in
+[33mf43b492[m visual knowledge graph explorer
+[33me6e55a2[m §8 cross-actor governance rate + cache-aware cost
+[33m04ef171[m fix two bugs the first real end-to-end run exposed
+[33m98557c5[m knowledgelayer §5.1 — relay identity: workspaces, roles, hashed tokens
+[33ma34454a[m fix two real defects found by the validation loop; harden sync paging
+[33m795f55f[m knowledgelayer §4.6 — the relay: cursor sync between two machines
+[33m178348b[m knowledgelayer §4.4 — three-band prompt, and a real optimistic-locking bug
+[33m1db3677[m knowledgelayer-v2 Phase 4 — hybrid retrieval + the Band B projections
+[33med06451[m knowledgelayer-v2 Phase 3 — the validity oracle
+[33maf8138a[m knowledgelayer-v2 Phase 2 — §J, the join
+[33m4c04d95[m extend the native extractor — blind-spot rate 6.5% -> 0.0%
+[33m669cb95[m knowledgelayer-v2 Phase 1 — code-index adapter + the measurement that decides it
+[33m7ecbdaa[m knowledgelayer-v2 Phase 0 — prove the loop, and fix what that proved broken
+[33m44c2818[m docs: status audit 2026-08-08 + unstick BODY_CHAR_CAP test
+[33med8d17f[m fix(contracts): expand git-status-shortened dirs into individual files
+[33ma6fd8c0[m capability contracts (docs/knowledgelayer.md §4.2b)
+[33md4bcbb5[m wire the read side: precheck + handoff + retrieval into every spawn
+[33m8776296[m fix: SSE hold-open + backfill; state.json isolation guard
+[33m947f861[m fix: three findings from post-push verification (6049f52..4c77904)
+[33m4c77904[m weeks 11-12 — Show HN kit + two blog drafts (docs/knowledgelayer.md §6)
+[33mcaa31bf[m weeks 9-10 — agent-trail bench harness (docs/knowledgelayer.md §5.3)
+[33m546d013[m week 8 — knowledge export / import / AGENTS.md (docs/knowledgelayer.md §5.2 §5.4)
+[33md7ef10f[m week 7 — multiplayer governance gate (docs/knowledgelayer.md §4.5)
+[33m81473ba[m weeks 5-6 — FTS5 ranked retrieval + L0 pack integration (§4.3 seed / §4.4)
+[33m70ea41b[m weeks 3-4 — multiplayer read-side via board MCP (docs/knowledgelayer.md §4.3)
+[33mb1f2486[m weeks 1-2 (cont.) — remaining 3 emission sites, backfill, `knowledge` CLI
+[33m38b3916[m weeks 1-2 — knowledge event log substrate (docs/knowledgelayer.md §4.1–§4.2)
+[33m6049f52[m week 0 — clear launch debt (docs/knowledgelayer.md §6)
+[33m3a0fe15[m feat(wizard): idea button in header, model picker (opus default), cinematic PRD synthesis theater
+[33m5389742[m feat: Phase 3/4/5 — team context, intelligence layer, loop engineering
+[33m184e86c[m feat(scout): quip engine + click-to-see state card (PRD 2.10)
+[33m0130aee[m docs: add DEPLOYMENT.md
+[33m45f9423[m release: v1.0.0 — initial open-source drop
+[33m39c9be2[m feat: run board in DAG order — ▶ Run all button
+[33m8f2a867[m feat: webhook notifications on task completion, failure, and awaiting_human
+[33maa25a42[m fix: correct import paths in plan.ts, update modal footer text
+[33me8a01d4[m refactor: replace Anthropic SDK planner with claude CLI
+[33m3e4584a[m feat: agent-trail plan — PRD-to-task-graph CLI command + web modal
+[33m00b5e2e[m chore: fix CLI c-before-init bug, harden claude not-found error, update README
+[33mf94ba2c[m feat: agent-trail v0.1.0 — 7-day MVP
