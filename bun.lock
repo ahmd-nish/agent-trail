@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "inventarium",
+      "dependencies": {
+        "@dnd-kit/utilities": "^3.2.2",
+      },
       "devDependencies": {
         "@biomejs/biome": "^1.9.4",
         "@types/bun": "latest",
@@ -12,18 +15,14 @@
     },
     "packages/cli": {
       "name": "inventarium",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "bin": {
-        "inventarium": "./src/index.ts",
-      },
-      "dependencies": {
-        "@inventarium/core": "workspace:*",
-        "@inventarium/server": "workspace:*",
+        "inventarium": "./dist/cli.js",
       },
     },
     "packages/core": {
       "name": "@inventarium/core",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.0.0",
         "jsonpath-plus": "^10.4.0",
@@ -31,7 +30,7 @@
     },
     "packages/mcp-server": {
       "name": "@inventarium/mcp-server",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "dependencies": {
         "@inventarium/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.0.0",
@@ -39,7 +38,7 @@
     },
     "packages/runner": {
       "name": "@inventarium/runner",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "dependencies": {
         "hono": "^4.0.0",
       },
@@ -50,7 +49,7 @@
     },
     "packages/server": {
       "name": "@inventarium/server",
-      "version": "1.0.0",
+      "version": "1.1.1",
       "dependencies": {
         "@inventarium/core": "workspace:*",
         "hono": "^4.12.21",
